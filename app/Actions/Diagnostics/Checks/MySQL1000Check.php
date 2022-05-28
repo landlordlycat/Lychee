@@ -3,10 +3,9 @@
 namespace App\Actions\Diagnostics\Checks;
 
 use App\Contracts\DiagnosticCheckInterface;
-use App\Factories\AlbumFactory;
-use App\Models\Album;
 use App\Models\Photo;
 use App\Models\SizeVariant;
+use Illuminate\Support\Facades\DB;
 
 /**
  * This class is NOT meant for productive use.
@@ -409,60 +408,28 @@ class MySQL1000Check implements DiagnosticCheckInterface
 
 	public function check(array &$errors): void
 	{
-		$albumFactory = resolve(AlbumFactory::class);
+		// Try to get 9182 size variants for `self::PHOTO_IDS`.
+		$sizeVariantModels = SizeVariant::query()
+			->whereIn('photo_id', self::PHOTO_IDS)
+			->get();
 
-		// A simple check first.
-		// We run the original model query and check what happens.
-		/** @var Album $album */
-		$album = $albumFactory->findAbstractAlbumOrFail(self::ALBUM_ID);
-		if ($album->photos->count() !== count(self::PHOTO_IDS)) {
+		if ($sizeVariantModels->count() !== self::EXPECTED_NUMBER_OF_SIZE_VARIANTS) {
 			$errors[] =
-				'Error: Incorrect number of hydrated photos; got ' .
-				$album->photos->count() .
-				', expected ' .
-				count(self::PHOTO_IDS);
-		}
-
-		// Totally inefficient, but this code is only dirty hack
-		$totalNumberOfSizeVariants = 0;
-		/** @var Photo $photo */
-		foreach ($album->photos as $photo) {
-			$sv = $photo->size_variants;
-			if ($sv->getOriginal()) {
-				$totalNumberOfSizeVariants++;
-			} else {
-				$errors[] = 'Error: Missing original size variant for photo ' . $photo->id;
-			}
-			$totalNumberOfSizeVariants += $sv->getSizeVariant(SizeVariant::MEDIUM2X) ? 1 : 0;
-			$totalNumberOfSizeVariants += $sv->getSizeVariant(SizeVariant::MEDIUM) ? 1 : 0;
-			$totalNumberOfSizeVariants += $sv->getSizeVariant(SizeVariant::SMALL2X) ? 1 : 0;
-			$totalNumberOfSizeVariants += $sv->getSizeVariant(SizeVariant::SMALL) ? 1 : 0;
-			$totalNumberOfSizeVariants += $sv->getSizeVariant(SizeVariant::THUMB2X) ? 1 : 0;
-			if ($sv->getThumb()) {
-				$totalNumberOfSizeVariants++;
-			} else {
-				$errors[] = 'Error: Missing thumb size variant for photo ' . $photo->id;
-			}
-		}
-
-		if ($totalNumberOfSizeVariants !== self::EXPECTED_NUMBER_OF_SIZE_VARIANTS) {
-			$errors[] =
-				'Error: Incorrect number of eagerly hydrated size variants; got ' .
-				$totalNumberOfSizeVariants .
+				'Error: Incorrect number of directly hydrated size variants with Eloquent; got ' .
+				$sizeVariantModels->count() .
 				', expected ' .
 				self::EXPECTED_NUMBER_OF_SIZE_VARIANTS;
 		}
 
-		// No we repeat parts the test and run the same query for size variants
-		// as Laravel does under the hood
-		$sizeVariants = SizeVariant::query()
+		// Repeat the same query but on the DB level
+		$sizeVariantsRaw = DB::table('size_variants')
 			->whereIn('photo_id', self::PHOTO_IDS)
 			->get();
 
-		if ($sizeVariants->count() !== self::EXPECTED_NUMBER_OF_SIZE_VARIANTS) {
+		if ($sizeVariantsRaw->count() !== self::EXPECTED_NUMBER_OF_SIZE_VARIANTS) {
 			$errors[] =
-				'Error: Incorrect number of directly hydrated size variants; got ' .
-				$sizeVariants->count() .
+				'Error: Incorrect number of directly hydrated size variants with DB facade; got ' .
+				$sizeVariantsRaw->count() .
 				', expected ' .
 				self::EXPECTED_NUMBER_OF_SIZE_VARIANTS;
 		}
