@@ -3,8 +3,6 @@
 namespace App\Actions\Diagnostics\Checks;
 
 use App\Contracts\DiagnosticCheckInterface;
-use App\Models\Photo;
-use App\Models\SizeVariant;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -408,20 +406,17 @@ class MySQL1000Check implements DiagnosticCheckInterface
 
 	public function check(array &$errors): void
 	{
-		// Try to get 9182 size variants for `self::PHOTO_IDS`.
-		$sizeVariantModels = SizeVariant::query()
-			->whereIn('photo_id', self::PHOTO_IDS)
-			->get();
+		// Assert that we are using the correct DB to avoid a ghost hunt
+		if (
+			DB::table('albums')->where('id', '=', self::ALBUM_ID)->count() !== 1 ||
+			DB::table('photos')->where('album_id', '=', self::ALBUM_ID)->count() !== count(self::PHOTO_IDS)
+		) {
+			$errors[] = 'Error: Wrong DB dump for this diagnostic; skipping all remaining tests';
 
-		if ($sizeVariantModels->count() !== self::EXPECTED_NUMBER_OF_SIZE_VARIANTS) {
-			$errors[] =
-				'Error: Incorrect number of directly hydrated size variants with Eloquent; got ' .
-				$sizeVariantModels->count() .
-				', expected ' .
-				self::EXPECTED_NUMBER_OF_SIZE_VARIANTS;
+			return;
 		}
 
-		// Repeat the same query but on the DB level
+		// Try to get size variants with low-level method call
 		$sizeVariantsRaw = DB::table('size_variants')
 			->whereIn('photo_id', self::PHOTO_IDS)
 			->get();
