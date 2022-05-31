@@ -8,8 +8,6 @@ use Illuminate\Support\Collection;
 
 class Builder extends BaseBuilder
 {
-	public static bool $isDebugEnabled = false;
-
 	/**
 	 * Execute the query as a "select" statement.
 	 *
@@ -23,9 +21,7 @@ class Builder extends BaseBuilder
 			return $this->processor->processSelect($this, $this->runSelect());
 		});
 
-		if (self::$isDebugEnabled) {
-			printf('%s::%s: returned %d results', __CLASS__, __METHOD__, count($result));
-		}
+		printf('%-50.50s: returned %d results' . PHP_EOL, __METHOD__ . '()', count($result));
 
 		return collect($result);
 	}
@@ -41,9 +37,7 @@ class Builder extends BaseBuilder
 			$this->toSql(), $this->getBindings(), !$this->useWritePdo
 		);
 
-		if (self::$isDebugEnabled) {
-			printf('%s::%s: returned %d results', __CLASS__, __METHOD__, count($result));
-		}
+		printf('%-50.50s: returned %d results' . PHP_EOL, __METHOD__ . '()', count($result));
 
 		return $result;
 	}

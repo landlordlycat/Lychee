@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Database\Query\Builder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -426,12 +425,10 @@ class MySQL100Bug extends Command
 			DB::table('albums')->where('id', '=', self::ALBUM_ID)->count() !== 1 ||
 			DB::table('photos')->where('album_id', '=', self::ALBUM_ID)->count() !== count(self::PHOTO_IDS)
 		) {
-			$this->line('Error: Wrong DB dump for this diagnostic; skipping all remaining tests');
+			$this->line('Error: Wrong DB dump for this test command; skipping all remaining tests');
 
 			return -1;
 		}
-
-		Builder::$isDebugEnabled = true;
 
 		// Try to get size variants with low-level method call
 		$sizeVariantsRaw = DB::table('size_variants')

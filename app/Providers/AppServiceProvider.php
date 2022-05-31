@@ -10,8 +10,6 @@ use App\Assets\Helpers;
 use App\Assets\SizeVariantLegacyNamingStrategy;
 use App\Contracts\SizeVariantFactory;
 use App\Contracts\SizeVariantNamingStrategy;
-use App\Database\Connection;
-use App\Database\DatabaseManager;
 use App\Factories\AlbumFactory;
 use App\Factories\LangFactory;
 use App\Image;
@@ -25,8 +23,6 @@ use App\ModelFunctions\ConfigFunctions;
 use App\ModelFunctions\SessionFunctions;
 use App\ModelFunctions\SymLinkFunctions;
 use App\Models\Configs;
-use Illuminate\Database\ConnectionInterface;
-use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
@@ -73,18 +69,6 @@ class AppServiceProvider extends ServiceProvider
 	 */
 	public function register()
 	{
-		// Overwrite core container services with our own for debugging
-		// purposes
-		// See \Illuminate\Foundation\Application::registerCoreContainerAliases()
-		// $this->app->alias('db', DatabaseManager::class);
-		// $this->app->bind('db', DatabaseManager::class);
-		// $this->app->bind(\Illuminate\Database\DatabaseManager::class, DatabaseManager::class);
-		$this->app->bind(ConnectionResolverInterface::class, DatabaseManager::class);
-		// $this->app->alias('db.connection', Connection::class);
-		// $this->app->bind('db.connection', Connection::class);
-		// $this->app->bind(\Illuminate\Database\Connection::class, Connection::class);
-		$this->app->bind(ConnectionInterface::class, Connection::class);
-
 		$this->app->singleton(Image\ImageHandlerInterface::class, function ($app) {
 			$compressionQuality = Configs::get_value('compression_quality', 90);
 
