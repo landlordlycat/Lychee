@@ -431,21 +431,50 @@ class MySQL100Bug extends Command
 		}
 
 		// Try to get size variants with low-level method call
-		$sizeVariantsRaw = DB::table('size_variants')
+		$this->line('');
+		$this->line('');
+		$this->line('Test #1');
+		$dbResult = DB::table('size_variants')
 			->whereIn('photo_id', self::PHOTO_IDS)
-			->get();
+			->get()->all();
+		$this->checkDbResult($dbResult);
 
-		if ($sizeVariantsRaw->count() !== self::EXPECTED_NUMBER_OF_SIZE_VARIANTS) {
+		// Make even more low-level DB query
+		$this->line('');
+		$this->line('');
+		$this->line('Test #1 - Manual query with bindings');
+		$dbResult = DB::select(
+			'SELECT * from size_variants WHERE photo_id IN (' .
+			implode(',', array_fill(0, count(self::PHOTO_IDS), '?')) .
+			')',
+			self::PHOTO_IDS
+		);
+		$this->checkDbResult($dbResult);
+
+		// Make even more low-level DB query
+		$this->line('');
+		$this->line('');
+		$this->line('Test #3 - Manual query without bindings');
+		$dbResult = DB::select(
+			'SELECT * from size_variants WHERE photo_id IN (' .
+			implode(',', array_map(fn (string $id) => '"' . $id . '"', self::PHOTO_IDS)) .
+			')');
+		$this->checkDbResult($dbResult);
+
+		return 0;
+	}
+
+	protected function checkDbResult(array $dbResult): void
+	{
+		if (count($dbResult) !== self::EXPECTED_NUMBER_OF_SIZE_VARIANTS) {
 			$this->line(
 				'Error: Incorrect number of directly hydrated size variants with DB facade; got ' .
-				$sizeVariantsRaw->count() .
+				count($dbResult) .
 				', expected ' .
 				self::EXPECTED_NUMBER_OF_SIZE_VARIANTS
 			);
 		} else {
 			$this->line('Everything seems fine :-(');
 		}
-
-		return 0;
 	}
 }
