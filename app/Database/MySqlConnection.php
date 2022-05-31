@@ -13,6 +13,34 @@ use PDO;
 
 class MySqlConnection extends Connection
 {
+	public function __construct($pdo, $database = '', $tablePrefix = '', array $config = [])
+	{
+		parent::__construct($pdo, $database, $tablePrefix, $config);
+
+		$pdo = $this->getPdo();
+		printf('%-50.50s: PDO driver name: %s' . PHP_EOL, __METHOD__ . '()', $pdo->getAttribute(PDO::ATTR_DRIVER_NAME));
+		try {
+			printf('%-50.50s: PDO buffer size: %d' . PHP_EOL, __METHOD__ . '()', $pdo->getAttribute(PDO::MYSQL_ATTR_MAX_BUFFER_SIZE));
+		} catch (\Throwable) {
+			printf('%-50.50s: PDO buffer size: %s' . PHP_EOL, __METHOD__ . '()', 'undefined');
+		}
+		try {
+			printf('%-50.50s: PDO direct query: %d' . PHP_EOL, __METHOD__ . '()', $pdo->getAttribute(PDO::MYSQL_ATTR_DIRECT_QUERY));
+		} catch (\Throwable) {
+			printf('%-50.50s: PDO direct query: %s' . PHP_EOL, __METHOD__ . '()', 'undefined');
+		}
+		try {
+			printf('%-50.50s: PDO network compression: %d' . PHP_EOL, __METHOD__ . '()', $pdo->getAttribute(PDO::MYSQL_ATTR_COMPRESS));
+		} catch (\Throwable) {
+			printf('%-50.50s: PDO network compression: %s' . PHP_EOL, __METHOD__ . '()', 'undefined');
+		}
+		try {
+			printf('%-50.50s: PDO multi statements: %d' . PHP_EOL, __METHOD__ . '()', $pdo->getAttribute(PDO::MYSQL_ATTR_MULTI_STATEMENTS));
+		} catch (\Throwable) {
+			printf('%-50.50s: PDO multi statements: %s' . PHP_EOL, __METHOD__ . '()', 'undefined');
+		}
+	}
+
 	/**
 	 * Determine if the connected database is a MariaDB database.
 	 *
