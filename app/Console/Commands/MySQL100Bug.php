@@ -431,8 +431,6 @@ class MySQL100Bug extends Command
 			return -1;
 		}
 
-		Connection::$beVerbose = true;
-
 		// As a sanity check make a manually constructed SQL query which seems to work everywhere
 		$this->line('');
 		$this->line('');
@@ -442,6 +440,8 @@ class MySQL100Bug extends Command
 			implode(',', array_map(fn (string $id) => '"' . $id . '"', self::PHOTO_IDS)) .
 			')');
 		$this->checkDbResult($dbResult);
+
+		Connection::$beVerbose = true;
 
 		// Make a low-level DB query which already fails
 		$this->line('');

@@ -131,14 +131,25 @@ class Connection extends BaseConnection
 		// For select statements, we'll simply execute the query and return an array
 		// of the database result set. Each element in the array will be a single
 		// row from the database table, and will either be an array or objects.
+		$pdo = $self->getPdoForSelect($useReadPdo);
+		$pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 		$statement = $self->prepared(
-			$self->getPdoForSelect($useReadPdo)->prepare($query)
+			$pdo->prepare($query)
 		);
 
 		$self->bindValues($statement, $self->prepareBindings($bindings));
 
 		if (!$statement->execute() && self::$beVerbose) {
 			printf('%-50.50s: $statement->execute() failed without exception, oh, oh' . PHP_EOL, __METHOD__ . '()');
+			$error = $statement->errorCode();
+			$errorInfo = $statement->errorInfo();
+			if ($error !== null) {
+				printf('%-50.50s: $statement->execute() returned error: %s' . PHP_EOL, __METHOD__ . '()', $error);
+			} else {
+				printf('%-50.50s: $statement->execute() returned no error, oh, oh' . PHP_EOL, __METHOD__ . '()', $error);
+			}
+			printf('%-50.50s: $statement->execute() returned error info:' . PHP_EOL, __METHOD__ . '()');
+			var_dump($errorInfo);
 		}
 
 		$result = $statement->fetchAll();
@@ -196,20 +207,31 @@ class Connection extends BaseConnection
 	 */
 	public function bindValues($statement, $bindings): void
 	{
+		$num = 0;
 		foreach ($bindings as $key => $value) {
-			if (!$statement->bindValue(
+			$success = $statement->bindValue(
 				is_string($key) ? $key : $key + 1,
 				$value,
 				is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR
-			) && self::$beVerbose) {
+			);
+			$num++;
+			if (self::$beVerbose) {
 				printf(
-					'%-50.50s: binding value %s as %s to placeholder %s failed' . PHP_EOL,
+					'%-50.50s: binding value %s as %s to placeholder %s %s' . PHP_EOL,
 					__METHOD__ . '()',
 					(string) $value,
 					is_int($value) ? 'int' : 'string',
-					is_string($key) ? $key : (string) ($key + 1)
+					is_string($key) ? $key : (string) ($key + 1),
+					$success ? 'succeeded' : 'failed'
 				);
 			}
+		}
+		if (self::$beVerbose) {
+			printf(
+				'%-50.50s: bound %d values in total' . PHP_EOL,
+				__METHOD__ . '()',
+				$num
+			);
 		}
 	}
 }
