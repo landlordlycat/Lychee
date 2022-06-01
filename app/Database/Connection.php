@@ -7,6 +7,8 @@ use Illuminate\Database\QueryException;
 
 class Connection extends BaseConnection
 {
+	public static bool $beVerbose = false;
+
 	public function __construct($pdo, $database = '', $tablePrefix = '', array $config = [])
 	{
 		parent::__construct($pdo, $database, $tablePrefix, $config);
@@ -44,6 +46,9 @@ class Connection extends BaseConnection
 	 */
 	protected function run($query, $bindings, \Closure $callback)
 	{
+		if (self::$beVerbose) {
+			printf('%-50.50s: count(beforeExecutingCallbacks) = %d' . PHP_EOL, __METHOD__ . '()', count($this->beforeExecutingCallbacks));
+		}
 		foreach ($this->beforeExecutingCallbacks as $beforeExecutingCallback) {
 			$beforeExecutingCallback($query, $bindings, $this);
 		}
@@ -95,9 +100,31 @@ class Connection extends BaseConnection
 
 	public static function selectCallback(Connection $self, string $query, array $bindings, $useReadPdo = true)
 	{
-		printf('%-50.50s: %s' . PHP_EOL, __METHOD__ . '()', $query);
+		if (self::$beVerbose) {
+			printf('%-50.50s: query = %s' . PHP_EOL, __METHOD__ . '()', $query);
+			printf('%-50.50s: bindings = [%s]' . PHP_EOL, __METHOD__ . '()', implode(',', $bindings));
+			printf('%-50.50s: useReadPdo = %s' . PHP_EOL, __METHOD__ . '()', $useReadPdo ? 'true' : 'false');
+
+			$numPlaceholders = substr_count($query, '?');
+			if (count($bindings) === $numPlaceholders) {
+				printf(
+					'%-50.50s: query has %d placeholders and bindings' . PHP_EOL, __METHOD__ . '()',
+					$numPlaceholders
+				);
+			} else {
+				printf(
+					'%-50.50s: query has %d placeholders but %d bindings are provided' . PHP_EOL, __METHOD__ . '()',
+					$numPlaceholders,
+					count($bindings)
+				);
+			}
+		}
 
 		if ($self->pretending()) {
+			if (self::$beVerbose) {
+				printf('%-50.50s: I am pretending' . PHP_EOL, __METHOD__ . '()');
+			}
+
 			return [];
 		}
 
@@ -110,16 +137,79 @@ class Connection extends BaseConnection
 
 		$self->bindValues($statement, $self->prepareBindings($bindings));
 
-		$statement->execute();
+		if (!$statement->execute() && self::$beVerbose) {
+			printf('%-50.50s: $statement->execute() failed without exception, oh, oh' . PHP_EOL, __METHOD__ . '()');
+		}
 
 		$result = $statement->fetchAll();
 
-		if (is_array($result)) {
-			printf('%-50.50s: $statement->fetchAll returned %d results' . PHP_EOL, __METHOD__ . '()', count($result));
-		} else {
-			printf('%-50.50s: $statement->fetchAll failed' . PHP_EOL, __METHOD__ . '()');
+		if (self::$beVerbose) {
+			if (is_array($result)) {
+				printf('%-50.50s: $statement->fetchAll returned %d results' . PHP_EOL, __METHOD__ . '()', count($result));
+			} else {
+				printf('%-50.50s: $statement->fetchAll failed' . PHP_EOL, __METHOD__ . '()');
+			}
 		}
 
 		return $result;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function prepareBindings(array $bindings): array
+	{
+		$grammar = $this->getQueryGrammar();
+
+		if (self::$beVerbose) {
+			printf('%-50.50s: got %d bindings' . PHP_EOL, __METHOD__ . '()', count($bindings));
+		}
+
+		$hasChanged = false;
+		foreach ($bindings as $key => $value) {
+			// We need to transform all instances of DateTimeInterface into the actual
+			// date string. Each query grammar maintains its own date string format
+			// so we'll just ask the grammar for the format to get from the date.
+			if ($value instanceof \DateTimeInterface) {
+				$hasChanged = true;
+				$bindings[$key] = $value->format($grammar->getDateFormat());
+			} elseif (is_bool($value)) {
+				$hasChanged = true;
+				$bindings[$key] = (int) $value;
+			}
+		}
+
+		if (self::$beVerbose) {
+			if ($hasChanged) {
+				printf('%-50.50s: bindings have been modified, oh, oh' . PHP_EOL, __METHOD__ . '()');
+			} else {
+				printf('%-50.50s: bindings have not been modified' . PHP_EOL, __METHOD__ . '()');
+			}
+			printf('%-50.50s: returning %d bindings' . PHP_EOL, __METHOD__ . '()', count($bindings));
+		}
+
+		return $bindings;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function bindValues($statement, $bindings): void
+	{
+		foreach ($bindings as $key => $value) {
+			if (!$statement->bindValue(
+				is_string($key) ? $key : $key + 1,
+				$value,
+				is_int($value) ? \PDO::PARAM_INT : \PDO::PARAM_STR
+			) && self::$beVerbose) {
+				printf(
+					'%-50.50s: binding value %s as %s to placeholder %s failed' . PHP_EOL,
+					__METHOD__ . '()',
+					(string) $value,
+					is_int($value) ? 'int' : 'string',
+					is_string($key) ? $key : (string) ($key + 1)
+				);
+			}
+		}
 	}
 }

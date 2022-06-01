@@ -19,6 +19,21 @@ class MySqlConnection extends Connection
 
 		$pdo = $this->getPdo();
 		printf('%-50.50s: PDO driver name: %s' . PHP_EOL, __METHOD__ . '()', $pdo->getAttribute(PDO::ATTR_DRIVER_NAME));
+
+		try {
+			printf(
+				'%-50.50s: PDO error mode: %s' . PHP_EOL, __METHOD__ . '()',
+				match ($pdo->getAttribute(PDO::ATTR_ERRMODE)) {
+					PDO::ERRMODE_SILENT => 'silent',
+					PDO::ERRMODE_WARNING => 'warning',
+					PDO::ERRMODE_EXCEPTION => 'exception',
+					default => 'undefined'
+				}
+			);
+		} catch (\Throwable) {
+			printf('%-50.50s: PDO error mode: %s' . PHP_EOL, __METHOD__ . '()', 'undefined');
+		}
+
 		try {
 			printf('%-50.50s: PDO buffer size: %d' . PHP_EOL, __METHOD__ . '()', $pdo->getAttribute(PDO::MYSQL_ATTR_MAX_BUFFER_SIZE));
 		} catch (\Throwable) {

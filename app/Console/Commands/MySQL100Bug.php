@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Database\Connection;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -430,19 +431,22 @@ class MySQL100Bug extends Command
 			return -1;
 		}
 
-		// Try to get size variants with low-level method call
+		Connection::$beVerbose = true;
+
+		// As a sanity check make a manually constructed SQL query which seems to work everywhere
 		$this->line('');
 		$this->line('');
-		$this->line('Test #1');
-		$dbResult = DB::table('size_variants')
-			->whereIn('photo_id', self::PHOTO_IDS)
-			->get()->all();
+		$this->line('Test #1 - Low-level query without bindings');
+		$dbResult = DB::select(
+			'SELECT * from size_variants WHERE photo_id IN (' .
+			implode(',', array_map(fn (string $id) => '"' . $id . '"', self::PHOTO_IDS)) .
+			')');
 		$this->checkDbResult($dbResult);
 
-		// Make even more low-level DB query
+		// Make a low-level DB query which already fails
 		$this->line('');
 		$this->line('');
-		$this->line('Test #1 - Manual query with bindings');
+		$this->line('Test #2 - Low-level query with bindings');
 		$dbResult = DB::select(
 			'SELECT * from size_variants WHERE photo_id IN (' .
 			implode(',', array_fill(0, count(self::PHOTO_IDS), '?')) .
@@ -451,15 +455,7 @@ class MySQL100Bug extends Command
 		);
 		$this->checkDbResult($dbResult);
 
-		// Make even more low-level DB query
-		$this->line('');
-		$this->line('');
-		$this->line('Test #3 - Manual query without bindings');
-		$dbResult = DB::select(
-			'SELECT * from size_variants WHERE photo_id IN (' .
-			implode(',', array_map(fn (string $id) => '"' . $id . '"', self::PHOTO_IDS)) .
-			')');
-		$this->checkDbResult($dbResult);
+		// See https://stackoverflow.com/questions/14416601/pdo-php-bindvalue-doesnt-work
 
 		return 0;
 	}

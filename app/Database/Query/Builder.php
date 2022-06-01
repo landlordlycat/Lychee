@@ -8,6 +8,8 @@ use Illuminate\Support\Collection;
 
 class Builder extends BaseBuilder
 {
+	public static bool $beVerbose = false;
+
 	/**
 	 * Execute the query as a "select" statement.
 	 *
@@ -21,7 +23,9 @@ class Builder extends BaseBuilder
 			return $this->processor->processSelect($this, $this->runSelect());
 		});
 
-		printf('%-50.50s: returned %d results' . PHP_EOL, __METHOD__ . '()', count($result));
+		if (self::$beVerbose) {
+			printf('%-50.50s: returned %d results' . PHP_EOL, __METHOD__ . '()', count($result));
+		}
 
 		return collect($result);
 	}
@@ -37,7 +41,9 @@ class Builder extends BaseBuilder
 			$this->toSql(), $this->getBindings(), !$this->useWritePdo
 		);
 
-		printf('%-50.50s: returned %d results' . PHP_EOL, __METHOD__ . '()', count($result));
+		if (self::$beVerbose) {
+			printf('%-50.50s: returned %d results' . PHP_EOL, __METHOD__ . '()', count($result));
+		}
 
 		return $result;
 	}

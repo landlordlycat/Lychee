@@ -9,17 +9,6 @@ class MySqlConnector extends BaseMySqlConnector
 	/**
 	 * {@inheritDoc}
 	 */
-	public function connect(array $config)
-	{
-		$connection = parent::connect($config);
-		printf('%-50.50s: returning %s' . PHP_EOL, __METHOD__ . '()', get_class($connection));
-
-		return $connection;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
 	protected function configureIsolationLevel($connection, array $config): void
 	{
 		if (isset($config['isolation_level'])) {
