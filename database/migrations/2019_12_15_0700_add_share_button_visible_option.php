@@ -5,14 +5,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-class AddShareButtonVisibleOption extends Migration
-{
+return new class() extends Migration {
 	/**
 	 * Run the migrations.
-	 *
-	 * @return void
 	 */
-	public function up()
+	public function up(): void
 	{
 		defined('BOOL') or define('BOOL', '0|1');
 
@@ -37,12 +34,10 @@ class AddShareButtonVisibleOption extends Migration
 
 	/**
 	 * Reverse the migrations.
-	 *
-	 * @return void
 	 */
-	public function down()
+	public function down(): void
 	{
 		Schema::dropColumns('albums', ['share_button_visible']);
 		DB::table('configs')->where('key', 'share_button_visible')->delete();
 	}
-}
+};

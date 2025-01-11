@@ -1,35 +1,19 @@
 <?php
 
-use App\Models\Configs;
-use Illuminate\Database\Migrations\Migration;
+use App\Legacy\BaseConfigMigration;
 
-class DisplayTakedate extends Migration
-{
-	/**
-	 * Run the migrations.
-	 *
-	 * @return void
-	 */
-	public function up()
+return new class() extends BaseConfigMigration {
+	public function getConfigs(): array
 	{
-		DB::table('configs')->insert([
+		return [
 			[
 				'key' => 'album_subtitle_type',
 				'value' => 'oldstyle',
 				'confidentiality' => '0',
 				'cat' => 'Gallery',
 				'type_range' => 'description|takedate|creation|oldstyle',
+				'description' => '',
 			],
-		]);
+		];
 	}
-
-	/**
-	 * Reverse the migrations.
-	 *
-	 * @return void
-	 */
-	public function down()
-	{
-		Configs::where('key', '=', 'album_subtitle_type')->delete();
-	}
-}
+};

@@ -4,7 +4,7 @@
 
 namespace App\Models\Extensions;
 
-use App\Contracts\InternalLycheeException;
+use App\Contracts\Exceptions\InternalLycheeException;
 use App\Exceptions\Internal\FailedModelAssumptionException;
 use App\Exceptions\Internal\NotImplementedException;
 use App\Exceptions\ModelDBException;
@@ -75,7 +75,7 @@ trait ForwardsToParentImplementation
 	/**
 	 * Perform a model insert operation.
 	 *
-	 * @param Builder $query
+	 * @param Builder<static> $query
 	 *
 	 * @return bool
 	 *
@@ -104,7 +104,7 @@ trait ForwardsToParentImplementation
 	/**
 	 * Perform a model update operation.
 	 *
-	 * @param Builder $query
+	 * @param Builder<static> $query
 	 *
 	 * @return bool
 	 */
@@ -205,7 +205,7 @@ trait ForwardsToParentImplementation
 	 *
 	 * Inspired by {@link \Illuminate\Database\Eloquent\Concerns\HasAttributes::isDirty()}.
 	 *
-	 * @param array|string|null $attributes
+	 * @param string[]|string|null $attributes
 	 *
 	 * @return bool
 	 */
@@ -222,7 +222,7 @@ trait ForwardsToParentImplementation
 	/**
 	 * Convert the model instance to an array.
 	 *
-	 * @return array
+	 * @return array<string,mixed>
 	 */
 	public function toArray(): array
 	{
@@ -327,6 +327,7 @@ trait ForwardsToParentImplementation
 		// If the "attribute" exists as a method on the model, we will just assume
 		// it is a relationship and will load and return results from the query
 		// and hydrate the relationship's value on the "relationships" array.
+		/** @disregard */
 		if (
 			method_exists($this, $key) ||
 			(static::$relationResolvers[get_class($this)][$key] ?? null)
@@ -402,6 +403,7 @@ trait ForwardsToParentImplementation
 		// If the "attribute" exists as a method on the model, we will just assume
 		// it is a relationship and will load and return results from the query
 		// and hydrate the relationship's value on the "relationships" array.
+		/** @disregard */
 		if (
 			method_exists($this, $key) ||
 			(static::$relationResolvers[get_class($this)][$key] ?? null)

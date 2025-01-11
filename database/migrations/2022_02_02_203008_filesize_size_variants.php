@@ -12,8 +12,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * The size of the original photo is also moved to the original size variant.
  */
-class FilesizeSizeVariants extends Migration
-{
+return new class() extends Migration {
 	private const VAR_TAB = 'size_variants';
 	private const PHOTO_FK = 'photo_id';
 	private const TYPE_COL = 'type';
@@ -24,8 +23,6 @@ class FilesizeSizeVariants extends Migration
 
 	/**
 	 * Run the migrations.
-	 *
-	 * @return void
 	 */
 	public function up(): void
 	{
@@ -83,8 +80,6 @@ class FilesizeSizeVariants extends Migration
 
 	/**
 	 * Reverse the migrations.
-	 *
-	 * @return void
 	 */
 	public function down(): void
 	{
@@ -111,4 +106,4 @@ class FilesizeSizeVariants extends Migration
 
 		DB::commit();
 	}
-}
+};

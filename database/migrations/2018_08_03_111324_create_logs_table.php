@@ -16,14 +16,11 @@ use Illuminate\Support\Facades\Schema;
 // | text     | text         | YES  |     | NULL    |                |
 // +----------+--------------+------+-----+---------+----------------+
 
-class CreateLogsTable extends Migration
-{
+return new class() extends Migration {
 	/**
 	 * Run the migrations.
-	 *
-	 * @return void
 	 */
-	public function up()
+	public function up(): void
 	{
 		Schema::dropIfExists('logs');
 		Schema::create('logs', function (Blueprint $table) {
@@ -38,11 +35,9 @@ class CreateLogsTable extends Migration
 
 	/**
 	 * Reverse the migrations.
-	 *
-	 * @return void
 	 */
-	public function down()
+	public function down(): void
 	{
 		Schema::dropIfExists('logs');
 	}
-}
+};

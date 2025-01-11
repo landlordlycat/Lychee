@@ -1,37 +1,19 @@
 <?php
 
-use App\Models\Configs;
-use Illuminate\Database\Migrations\Migration;
+use App\Legacy\BaseConfigMigration;
 
-class AddLogMaxNumLine extends Migration
-{
-	/**
-	 * Run the migrations.
-	 *
-	 * @return void
-	 */
-	public function up()
+return new class() extends BaseConfigMigration {
+	public function getConfigs(): array
 	{
-		defined('INT') or define('INT', 'int');
-
-		DB::table('configs')->insert([
+		return [
 			[
 				'key' => 'log_max_num_line',
 				'value' => '1000',
 				'confidentiality' => '2',
 				'cat' => 'Admin',
-				'type_range' => INT,
+				'type_range' => self::INT,
+				'description' => '',
 			],
-		]);
+		];
 	}
-
-	/**
-	 * Reverse the migrations.
-	 *
-	 * @return void
-	 */
-	public function down()
-	{
-		Configs::where('key', '=', 'log_max_num_line')->delete();
-	}
-}
+};

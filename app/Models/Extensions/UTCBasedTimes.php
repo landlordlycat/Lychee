@@ -2,6 +2,7 @@
 
 namespace App\Models\Extensions;
 
+use App\Exceptions\Internal\LycheeLogicException;
 use Carbon\CarbonInterface;
 use Carbon\Exceptions\InvalidTimeZoneException;
 use Illuminate\Support\Carbon;
@@ -23,7 +24,7 @@ use function Safe\preg_match;
  *
  * **Attention:**
  * For this class to work properly, the timezone of the database connection
- * must be set to UTC for those RDBM systems (e.g. PosgreSQL, MySQL) which
+ * must be set to UTC for those RDBM systems (e.g. PostgreSQL, MySQL) which
  * support "timezone aware" database connections.
  * This means the database configuration for MySQL should explicitly include
  * the option `'timezone' => '+00:00'` and the configuration for PostgreSQL
@@ -81,10 +82,14 @@ trait UTCBasedTimes
 		// If $value is already an instance of Carbon, the method returns a
 		// deep copy, hence it is safe to change the timezone below without
 		// altering the original object
-		$carbonTime = $this->asDateTime($value);
-		$carbonTime?->setTimezone(self::$DB_TIMEZONE_NAME);
+		if ($value === null || $value === '') {
+			return null;
+		}
 
-		return $carbonTime?->format(self::$DB_DATETIME_FORMAT);
+		$carbonTime = $this->asDateTime($value);
+		$carbonTime->setTimezone(self::$DB_TIMEZONE_NAME);
+
+		return $carbonTime->format(self::$DB_DATETIME_FORMAT);
 	}
 
 	/**
@@ -123,14 +128,14 @@ trait UTCBasedTimes
 	 *
 	 * @param mixed $value
 	 *
-	 * @return Carbon|null
+	 * @return Carbon
 	 *
 	 * @throws InvalidTimeZoneException
 	 */
-	public function asDateTime($value): ?Carbon
+	public function asDateTime($value): Carbon
 	{
 		if ($value === null || $value === '') {
-			return null;
+			throw new LycheeLogicException('asDateTime called on null or empty string');
 		}
 
 		// If this value is already a Carbon instance, we shall just return it as is.
@@ -200,7 +205,7 @@ trait UTCBasedTimes
 			}
 
 			return $result;
-		} catch (InvalidArgumentException) {
+		} catch (\InvalidArgumentException) {
 			// If the specified format did not mach, don't throw an exception,
 			// but try to parse the value using a best-effort approach, see below
 		}
@@ -227,6 +232,6 @@ trait UTCBasedTimes
 	 */
 	protected function serializeDate(\DateTimeInterface $date): string
 	{
-		return $date->format('Y-m-d\TH:i:s.uP');
+		return $date->format('Y-m-d\TH:i:sP');
 	}
 }

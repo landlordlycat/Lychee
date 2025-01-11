@@ -1,32 +1,26 @@
 <?php
 
-use App\Models\Configs;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
-class ConfigRemoveImageOverlay extends Migration
-{
+return new class() extends Migration {
 	/**
 	 * Run the migrations.
-	 *
-	 * @return void
 	 */
-	public function up()
+	public function up(): void
 	{
-		Configs::where('key', '=', 'image_overlay_type')->update(['type_range' => 'exif|desc|date|none']);
-		Configs::where('key', '=', 'image_overlay')->delete();
+		DB::table('configs')->where('key', '=', 'image_overlay_type')->update(['type_range' => 'exif|desc|date|none']);
+		DB::table('configs')->where('key', '=', 'image_overlay')->delete();
 	}
 
 	/**
 	 * Reverse the migrations.
-	 *
-	 * @return void
 	 */
-	public function down()
+	public function down(): void
 	{
 		defined('BOOL') or define('BOOL', '0|1');
 
-		Configs::where('key', '=', 'image_overlay_type')->update(['type_range' => 'exif|desc|takedate']);
+		DB::table('configs')->where('key', '=', 'image_overlay_type')->update(['type_range' => 'exif|desc|takedate']);
 
 		DB::table('configs')->insert([
 			[
@@ -38,4 +32,4 @@ class ConfigRemoveImageOverlay extends Migration
 			],
 		]);
 	}
-}
+};

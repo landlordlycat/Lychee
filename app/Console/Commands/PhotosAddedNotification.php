@@ -9,7 +9,8 @@ use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Mail;
-use Symfony\Component\Console\Exception\ExceptionInterface as SymfonyConsoleException;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 
 class PhotosAddedNotification extends Command
 {
@@ -26,16 +27,6 @@ class PhotosAddedNotification extends Command
 	 * @var string
 	 */
 	protected $description = 'Send email notifications for newly added photos';
-
-	/**
-	 * Create a new command instance.
-	 *
-	 * @throws SymfonyConsoleException
-	 */
-	public function __construct()
-	{
-		parent::__construct();
-	}
 
 	/**
 	 * Execute the console command.
@@ -69,6 +60,12 @@ class PhotosAddedNotification extends Command
 					}
 
 					$thumbUrl = $photo->size_variants->getThumb()?->url;
+
+					// Mail clients do not like relative paths.
+					// if url does not start with 'http', it is not absolute...
+					if (!Str::startsWith('http', $thumbUrl)) {
+						$thumbUrl = URL::asset($thumbUrl);
+					}
 
 					// If the url config doesn't contain a trailing slash then add it
 					if (str_ends_with(config('app.url'), '/')) {

@@ -15,14 +15,11 @@ MariaDB [lychee]> show columns from lychee_settings;
 +-------+--------------+------+-----+---------+-------+
 */
 
-class CreateConfigsTable extends Migration
-{
+return new class() extends Migration {
 	/**
 	 * Run the migrations.
-	 *
-	 * @return void
 	 */
-	public function up()
+	public function up(): void
 	{
 		Schema::dropIfExists('configs');
 		Schema::create('configs', function (Blueprint $table) {
@@ -67,11 +64,9 @@ class CreateConfigsTable extends Migration
 
 	/**
 	 * Reverse the migrations.
-	 *
-	 * @return void
 	 */
-	public function down()
+	public function down(): void
 	{
 		Schema::dropIfExists('configs');
 	}
-}
+};

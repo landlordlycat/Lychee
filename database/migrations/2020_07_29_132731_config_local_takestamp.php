@@ -1,37 +1,19 @@
 <?php
 
-use App\Models\Configs;
-use Illuminate\Database\Migrations\Migration;
+use App\Legacy\BaseConfigMigration;
 
-class ConfigLocalTakestamp extends Migration
-{
-	/**
-	 * Run the migrations.
-	 *
-	 * @return void
-	 */
-	public function up()
+return new class() extends BaseConfigMigration {
+	public function getConfigs(): array
 	{
-		defined('DISABLED') or define('DISABLED', '');
-
-		DB::table('configs')->insert([
+		return [
 			[
 				'key' => 'local_takestamp_video_formats',
 				'value' => '.avi|.mov',
 				'confidentiality' => '2',
 				'cat' => 'Image Processing',
-				'type_range' => DISABLED,
+				'type_range' => '',
+				'description' => '',
 			],
-		]);
+		];
 	}
-
-	/**
-	 * Reverse the migrations.
-	 *
-	 * @return void
-	 */
-	public function down()
-	{
-		Configs::where('key', '=', 'local_takestamp_video_formats')->delete();
-	}
-}
+};

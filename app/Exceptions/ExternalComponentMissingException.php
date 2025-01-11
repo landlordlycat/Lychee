@@ -9,9 +9,9 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Returns status code 501 (Not implemented) to an HTTP client.
  */
-class ExternalComponentMissingException extends LycheeBaseException
+class ExternalComponentMissingException extends BaseLycheeException
 {
-	public function __construct(string $msg, \Throwable $previous = null)
+	public function __construct(string $msg, ?\Throwable $previous = null)
 	{
 		parent::__construct(Response::HTTP_NOT_IMPLEMENTED, $msg, $previous);
 	}

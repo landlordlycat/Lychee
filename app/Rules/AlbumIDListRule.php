@@ -2,16 +2,18 @@
 
 namespace App\Rules;
 
-use App\Contracts\HasRandomID;
-use App\Factories\AlbumFactory;
-use Illuminate\Contracts\Validation\Rule;
+use App\Constants\RandomID;
+use App\Enum\SmartAlbumType;
+use Illuminate\Contracts\Validation\ValidationRule;
 
-class AlbumIDListRule implements Rule
+class AlbumIDListRule implements ValidationRule
 {
+	use ValidateTrait;
+
 	/**
 	 * {@inheritDoc}
 	 */
-	public function passes($attribute, $value): bool
+	public function passes(string $attribute, mixed $value): bool
 	{
 		if (!is_string($value)) {
 			return false;
@@ -32,7 +34,7 @@ class AlbumIDListRule implements Rule
 	public function message(): string
 	{
 		return ':attribute must be a comma-separated string of strings with either ' .
-			HasRandomID::ID_LENGTH . ' characters each or one of the built-in IDs ' .
-			implode(', ', array_keys(AlbumFactory::BUILTIN_SMARTS));
+			RandomID::ID_LENGTH . ' characters each or one of the built-in IDs ' .
+			implode(', ', SmartAlbumType::values());
 	}
 }

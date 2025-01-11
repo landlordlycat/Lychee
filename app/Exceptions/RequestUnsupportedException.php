@@ -12,9 +12,9 @@ use Symfony\Component\HttpFoundation\Response;
  * This mainly affects certain request (such as Album::getArchive) if Lychee
  * uses non-local storage for the media files.
  */
-class RequestUnsupportedException extends LycheeBaseException
+class RequestUnsupportedException extends BaseLycheeException
 {
-	public function __construct(string $msg, \Throwable $previous = null)
+	public function __construct(string $msg, ?\Throwable $previous = null)
 	{
 		parent::__construct(Response::HTTP_NOT_IMPLEMENTED, $msg, $previous);
 	}

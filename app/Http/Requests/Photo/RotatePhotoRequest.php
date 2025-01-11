@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Photo;
 
+use App\Contracts\Http\Requests\HasPhoto;
+use App\Contracts\Http\Requests\RequestAttribute;
 use App\Http\Requests\BaseApiRequest;
-use App\Http\Requests\Contracts\HasPhoto;
+use App\Http\Requests\Traits\Authorize\AuthorizeCanEditPhotoTrait;
 use App\Http\Requests\Traits\HasPhotoTrait;
 use App\Models\Photo;
 use App\Rules\RandomIDRule;
@@ -12,18 +14,9 @@ use Illuminate\Validation\Rule;
 class RotatePhotoRequest extends BaseApiRequest implements HasPhoto
 {
 	use HasPhotoTrait;
-
-	public const DIRECTION_ATTRIBUTE = 'direction';
+	use AuthorizeCanEditPhotoTrait;
 
 	protected int $direction;
-
-	/**
-	 * {@inheritDoc}
-	 */
-	public function authorize(): bool
-	{
-		return $this->authorizePhotoWrite($this->photo);
-	}
 
 	/**
 	 * {@inheritDoc}
@@ -31,8 +24,8 @@ class RotatePhotoRequest extends BaseApiRequest implements HasPhoto
 	public function rules(): array
 	{
 		return [
-			HasPhoto::PHOTO_ID_ATTRIBUTE => ['required', new RandomIDRule(false)],
-			self::DIRECTION_ATTRIBUTE => ['required', Rule::in([-1, 1])],
+			RequestAttribute::PHOTO_ID_ATTRIBUTE => ['required', new RandomIDRule(false)],
+			RequestAttribute::DIRECTION_ATTRIBUTE => ['required', Rule::in([-1, 1])],
 		];
 	}
 
@@ -41,10 +34,12 @@ class RotatePhotoRequest extends BaseApiRequest implements HasPhoto
 	 */
 	protected function processValidatedValues(array $values, array $files): void
 	{
+		/** @var ?string $photoID */
+		$photoID = $values[RequestAttribute::PHOTO_ID_ATTRIBUTE];
 		$this->photo = Photo::query()
 			->with(['size_variants'])
-			->findOrFail($values[HasPhoto::PHOTO_ID_ATTRIBUTE]);
-		$this->direction = intval($values[self::DIRECTION_ATTRIBUTE]);
+			->findOrFail($photoID);
+		$this->direction = intval($values[RequestAttribute::DIRECTION_ATTRIBUTE]);
 	}
 
 	public function direction(): int

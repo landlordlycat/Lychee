@@ -2,14 +2,18 @@
 
 namespace App\Http\Requests\Album;
 
+use App\Contracts\Http\Requests\HasParentAlbum;
+use App\Contracts\Http\Requests\HasTitle;
+use App\Contracts\Http\Requests\RequestAttribute;
+use App\Contracts\Models\AbstractAlbum;
 use App\Http\Requests\BaseApiRequest;
-use App\Http\Requests\Contracts\HasParentAlbum;
-use App\Http\Requests\Contracts\HasTitle;
 use App\Http\Requests\Traits\HasParentAlbumTrait;
 use App\Http\Requests\Traits\HasTitleTrait;
 use App\Models\Album;
+use App\Policies\AlbumPolicy;
 use App\Rules\RandomIDRule;
 use App\Rules\TitleRule;
+use Illuminate\Support\Facades\Gate;
 
 class AddAlbumRequest extends BaseApiRequest implements HasTitle, HasParentAlbum
 {
@@ -21,7 +25,7 @@ class AddAlbumRequest extends BaseApiRequest implements HasTitle, HasParentAlbum
 	 */
 	public function authorize(): bool
 	{
-		return $this->authorizeAlbumWrite($this->parentAlbum);
+		return Gate::check(AlbumPolicy::CAN_EDIT, [AbstractAlbum::class, $this->parentAlbum]);
 	}
 
 	/**
@@ -30,8 +34,8 @@ class AddAlbumRequest extends BaseApiRequest implements HasTitle, HasParentAlbum
 	public function rules(): array
 	{
 		return [
-			HasParentAlbum::PARENT_ID_ATTRIBUTE => ['present', new RandomIDRule(true)],
-			HasTitle::TITLE_ATTRIBUTE => ['required', new TitleRule()],
+			RequestAttribute::PARENT_ID_ATTRIBUTE => ['present', new RandomIDRule(true)],
+			RequestAttribute::TITLE_ATTRIBUTE => ['required', new TitleRule()],
 		];
 	}
 
@@ -40,12 +44,11 @@ class AddAlbumRequest extends BaseApiRequest implements HasTitle, HasParentAlbum
 	 */
 	protected function processValidatedValues(array $values, array $files): void
 	{
-		$parentAlbumID = $values[HasParentAlbum::PARENT_ID_ATTRIBUTE];
-		$this->parentAlbum = $parentAlbumID === null ?
+		/** @var string|null */
+		$parentAlbumID = $values[RequestAttribute::PARENT_ID_ATTRIBUTE];
+		$this->parent_album = $parentAlbumID === null ?
 			null :
-			Album::query()->findOrFail(
-				$values[HasParentAlbum::PARENT_ID_ATTRIBUTE]
-			);
-		$this->title = $values[HasTitle::TITLE_ATTRIBUTE];
+			Album::query()->findOrFail($parentAlbumID);
+		$this->title = $values[RequestAttribute::TITLE_ATTRIBUTE];
 	}
 }

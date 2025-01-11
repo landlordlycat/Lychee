@@ -6,7 +6,6 @@ use App\Exceptions\ModelDBException;
 use Illuminate\Database\Eloquent\JsonEncodingException;
 use Illuminate\Support\Str;
 use function Safe\json_encode;
-use function Safe\json_last_error_msg;
 
 /**
  * Fixed Eloquent model for all Lychee models.
@@ -25,6 +24,7 @@ trait ThrowsConsistentExceptions
 	protected function friendlyModelName(): string
 	{
 		$name = Str::snake(class_basename($this), ' ');
+
 		// Remove some typical, implementation-specific pre- and suffixes from the name
 		return str_replace('/(^abstract )|( impl$)|( interface$)/', '', $name);
 	}
@@ -45,7 +45,7 @@ trait ThrowsConsistentExceptions
 	abstract public function toArray();
 
 	/**
-	 * @param array $options
+	 * @param array<string,bool> $options
 	 *
 	 * @return bool always return true
 	 *
@@ -104,7 +104,7 @@ trait ThrowsConsistentExceptions
 	/**
 	 * Serializes this object into an array.
 	 *
-	 * @return array The serialized properties of this object
+	 * @return array<string,mixed> The serialized properties of this object
 	 *
 	 * @throws \JsonException
 	 *

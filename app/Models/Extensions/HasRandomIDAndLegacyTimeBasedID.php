@@ -2,7 +2,7 @@
 
 namespace App\Models\Extensions;
 
-use App\Contracts\HasRandomID;
+use App\Constants\RandomID;
 use App\Exceptions\InsufficientEntropyException;
 use App\Exceptions\Internal\NotImplementedException;
 use App\Exceptions\Internal\TimeBasedIdException;
@@ -11,10 +11,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\InvalidCastException;
 use Illuminate\Database\Eloquent\JsonEncodingException;
 use Illuminate\Database\QueryException;
-use function Safe\sprintf;
 
 /**
  * Trait HasTimeBasedID.
+ *
+ * @template TModel of \Illuminate\Database\Eloquent\Model
  *
  * Inspired by https://emymbenoun.medium.com/how-to-use-uuids-instead-of-auto-increment-ids-in-your-laravel-app-2e6cc045f6c1.
  */
@@ -59,7 +60,7 @@ trait HasRandomIDAndLegacyTimeBasedID
 		if ($key === $this->getKeyName()) {
 			throw new NotImplementedException('must not set primary key explicitly, primary key will be set on first insert');
 		}
-		if ($key === HasRandomID::LEGACY_ID_NAME) {
+		if ($key === RandomID::LEGACY_ID_NAME) {
 			throw new NotImplementedException('must not set legacy key explicitly, legacy key will be set on first insert');
 		}
 
@@ -73,7 +74,7 @@ trait HasRandomIDAndLegacyTimeBasedID
 	 * The method is mostly copied & pasted from {@link \Illuminate\Database\Eloquent\Model::performInsert()}
 	 * with adoptions regarding key generation.
 	 *
-	 * @param Builder $query
+	 * @param Builder<static> $query
 	 *
 	 * @return bool true on success
 	 *
@@ -107,7 +108,7 @@ trait HasRandomIDAndLegacyTimeBasedID
 			} catch (QueryException $e) {
 				$lastException = $e;
 				$errorCode = $e->getCode();
-				if ($errorCode === 23000 || $errorCode === 23505) {
+				if ($errorCode === 23000 || $errorCode === 23505 || $errorCode === '23000' || $errorCode === '23505') {
 					// houston, we have a duplicate entry problem
 					// Our ids are based on current system time, so
 					// wait randomly up to 1s before retrying.
@@ -150,7 +151,13 @@ trait HasRandomIDAndLegacyTimeBasedID
 		// The other characters (a-z, A-Z, 0-9) are legal within an URL.
 		// As the number of bytes is divisible by 3, no trailing `=` occurs.
 		try {
-			$id = strtr(base64_encode(random_bytes(3 * HasRandomID::ID_LENGTH / 4)), '+/', '-_');
+			$id = strtr(base64_encode(random_bytes(3 * RandomID::ID_LENGTH / 4)), '+/', '-_');
+			// Last character whould not be a - for some version of android.
+			// this will reduce the entropy and induce a slight bias but we are still
+			// above the birthday bounds.
+			if ($id[23] === '-') {
+				$id[23] = '0';
+			}
 		} catch (\Exception $e) {
 			throw new InsufficientEntropyException($e);
 		}
@@ -173,6 +180,6 @@ trait HasRandomIDAndLegacyTimeBasedID
 			$legacyID = str_replace('.', '', $legacyID);
 		}
 		$this->attributes[$this->getKeyName()] = $id;
-		$this->attributes[HasRandomID::LEGACY_ID_NAME] = intval($legacyID);
+		$this->attributes[RandomID::LEGACY_ID_NAME] = intval($legacyID);
 	}
 }

@@ -3,7 +3,10 @@
 namespace App\Models\Extensions;
 
 use App\Actions\SizeVariant\Delete;
-use App\DTO\DTO;
+use App\DTO\AbstractDTO;
+use App\DTO\ImageDimension;
+use App\Enum\SizeVariantType;
+use App\Enum\StorageDiskType;
 use App\Exceptions\Internal\IllegalOrderOfOperationException;
 use App\Exceptions\Internal\InvalidSizeVariantException;
 use App\Exceptions\Internal\LycheeAssertionError;
@@ -13,11 +16,14 @@ use App\Exceptions\ModelDBException;
 use App\Models\Photo;
 use App\Models\SizeVariant;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as BaseCollection;
 
 /**
  * Class SizeVariants.
+ *
+ * @extends AbstractDTO<array<string,string>|null>
  */
-class SizeVariants extends DTO
+class SizeVariants extends AbstractDTO
 {
 	/** @var Photo the parent object this object is tied to */
 	private Photo $photo;
@@ -29,14 +35,15 @@ class SizeVariants extends DTO
 	private ?SizeVariant $small = null;
 	private ?SizeVariant $thumb2x = null;
 	private ?SizeVariant $thumb = null;
+	private ?SizeVariant $placeholder = null;
 
 	/**
 	 * SizeVariants constructor.
 	 *
-	 * @param Photo                        $photo        the parent object
-	 *                                                   this object is tied to
-	 * @param Collection<SizeVariant>|null $sizeVariants a collection of size
-	 *                                                   variants
+	 * @param Photo                            $photo        the parent object
+	 *                                                       this object is tied to
+	 * @param Collection<int,SizeVariant>|null $sizeVariants a collection of size
+	 *                                                       variants
 	 *
 	 * @throws LycheeInvalidArgumentException thrown if the photo and the
 	 *                                        collection of size variants don't
@@ -67,84 +74,82 @@ class SizeVariants extends DTO
 			throw new LycheeInvalidArgumentException('ID of owning photo does not match');
 		}
 		$sizeVariant->setRelation('photo', $this->photo);
-		switch ($sizeVariant->type) {
-			case SizeVariant::ORIGINAL:
-				$ref = &$this->original;
-				break;
-			case SizeVariant::MEDIUM2X:
-				$ref = &$this->medium2x;
-				break;
-			case SizeVariant::MEDIUM:
-				$ref = &$this->medium;
-				break;
-			case SizeVariant::SMALL2X:
-				$ref = &$this->small2x;
-				break;
-			case SizeVariant::SMALL:
-				$ref = &$this->small;
-				break;
-			case SizeVariant::THUMB2X:
-				$ref = &$this->thumb2x;
-				break;
-			case SizeVariant::THUMB:
-				$ref = &$this->thumb;
-				break;
-			default:
-				throw new LycheeInvalidArgumentException('size variant ' . $sizeVariant . 'invalid');
-		}
+		$candidate = $this->getSizeVariant($sizeVariant->type);
 
-		if (isset($ref) && $ref->id !== $sizeVariant->id) {
+		if ($candidate !== null && $candidate->id !== $sizeVariant->id) {
 			throw new LycheeInvalidArgumentException('Another size variant of the same type has already been added');
 		}
-		$ref = $sizeVariant;
+
+		match ($sizeVariant->type) {
+			SizeVariantType::ORIGINAL => $this->original = $sizeVariant,
+			SizeVariantType::MEDIUM2X => $this->medium2x = $sizeVariant,
+			SizeVariantType::MEDIUM => $this->medium = $sizeVariant,
+			SizeVariantType::SMALL2X => $this->small2x = $sizeVariant,
+			SizeVariantType::SMALL => $this->small = $sizeVariant,
+			SizeVariantType::THUMB2X => $this->thumb2x = $sizeVariant,
+			SizeVariantType::THUMB => $this->thumb = $sizeVariant,
+			SizeVariantType::PLACEHOLDER => $this->placeholder = $sizeVariant,
+		};
 	}
 
 	/**
 	 * Serializes this object into an array.
 	 *
-	 * @return array<string, array|null> The serialized properties of this object
+	 * @return array<string,array<string,string>|null> The serialized properties of this object
 	 */
 	public function toArray(): array
 	{
 		return [
-			'original' => $this->original?->toArray(),
-			'medium2x' => $this->medium2x?->toArray(),
-			'medium' => $this->medium?->toArray(),
-			'small2x' => $this->small2x?->toArray(),
-			'small' => $this->small?->toArray(),
-			'thumb2x' => $this->thumb2x?->toArray(),
-			'thumb' => $this->thumb?->toArray(),
+			SizeVariantType::ORIGINAL->name() => $this->original?->toArray(),
+			SizeVariantType::MEDIUM2X->name() => $this->medium2x?->toArray(),
+			SizeVariantType::MEDIUM->name() => $this->medium?->toArray(),
+			SizeVariantType::SMALL2X->name() => $this->small2x?->toArray(),
+			SizeVariantType::SMALL->name() => $this->small?->toArray(),
+			SizeVariantType::THUMB2X->name() => $this->thumb2x?->toArray(),
+			SizeVariantType::THUMB->name() => $this->thumb?->toArray(),
+			SizeVariantType::PLACEHOLDER->name() => $this->placeholder?->toArray(),
 		];
+	}
+
+	/**
+	 * Return all SizeVariants as a collection.
+	 *
+	 * @return BaseCollection<int,SizeVariant|null>
+	 */
+	public function toCollection(): BaseCollection
+	{
+		return collect([
+			$this->original,
+			$this->medium2x,
+			$this->medium,
+			$this->small2x,
+			$this->small,
+			$this->thumb2x,
+			$this->thumb,
+			$this->placeholder,
+		]);
 	}
 
 	/**
 	 * Returns the requested size variant of the photo.
 	 *
-	 * @param int $sizeVariantType the type of the size variant; allowed
-	 *                             values are:
-	 *                             {@link SizeVariant::ORIGINAL},
-	 *                             {@link SizeVariant::MEDIUM2X},
-	 *                             {@link SizeVariant::MEDIUM2},
-	 *                             {@link SizeVariant::SMALL2X},
-	 *                             {@link SizeVariant::SMALL},
-	 *                             {@link SizeVariant::THUMB2X}, and
-	 *                             {@link SizeVariant::THUMB}
+	 * @param SizeVariantType $sizeVariantType the type of the size variant
 	 *
 	 * @return SizeVariant|null The size variant
 	 *
 	 * @throws InvalidSizeVariantException
 	 */
-	public function getSizeVariant(int $sizeVariantType): ?SizeVariant
+	public function getSizeVariant(SizeVariantType $sizeVariantType): ?SizeVariant
 	{
 		return match ($sizeVariantType) {
-			SizeVariant::ORIGINAL => $this->original,
-			SizeVariant::MEDIUM2X => $this->medium2x,
-			SizeVariant::MEDIUM => $this->medium,
-			SizeVariant::SMALL2X => $this->small2x,
-			SizeVariant::SMALL => $this->small,
-			SizeVariant::THUMB2X => $this->thumb2x,
-			SizeVariant::THUMB => $this->thumb,
-			default => throw new InvalidSizeVariantException('size variant ' . $sizeVariantType . 'invalid'),
+			SizeVariantType::ORIGINAL => $this->original,
+			SizeVariantType::MEDIUM2X => $this->medium2x,
+			SizeVariantType::MEDIUM => $this->medium,
+			SizeVariantType::SMALL2X => $this->small2x,
+			SizeVariantType::SMALL => $this->small,
+			SizeVariantType::THUMB2X => $this->thumb2x,
+			SizeVariantType::THUMB => $this->thumb,
+			SizeVariantType::PLACEHOLDER => $this->placeholder,
 		};
 	}
 
@@ -153,9 +158,39 @@ class SizeVariants extends DTO
 		return $this->original;
 	}
 
+	/**
+	 * Get Medium2x or fallback to Medium.
+	 *
+	 * @return SizeVariant|null
+	 */
+	public function getMedium2x(): ?SizeVariant
+	{
+		return $this->medium2x;
+	}
+
+	/**
+	 * get Medium or fallback to Original.
+	 *
+	 * @return SizeVariant|null
+	 */
 	public function getMedium(): ?SizeVariant
 	{
 		return $this->medium;
+	}
+
+	/**
+	 * Get Small2x or fallback to Small.
+	 *
+	 * @return SizeVariant|null
+	 */
+	public function getSmall2x(): ?SizeVariant
+	{
+		return $this->small2x;
+	}
+
+	public function getSmall(): ?SizeVariant
+	{
+		return $this->small;
 	}
 
 	public function getThumb2x(): ?SizeVariant
@@ -168,46 +203,42 @@ class SizeVariants extends DTO
 		return $this->thumb;
 	}
 
+	public function getPlaceholder(): ?SizeVariant
+	{
+		return $this->placeholder;
+	}
+
 	/**
 	 * Creates a new instance of {@link \App\Models\SizeVariant} for the
 	 * associated photo and persists it to DB.
 	 *
-	 * @param int    $sizeVariantType the type of the desired size variant;
-	 *                                allowed values are:
-	 *                                {@link SizeVariant::ORIGINAL},
-	 *                                {@link SizeVariant::MEDIUM2X},
-	 *                                {@link SizeVariant::MEDIUM2},
-	 *                                {@link SizeVariant::SMALL2X},
-	 *                                {@link SizeVariant::SMALL},
-	 *                                {@link SizeVariant::THUMB2X}, and
-	 *                                {@link SizeVariant::THUMB}
-	 * @param string $shortPath       the short path of the media file this
-	 *                                size variant shall point to
-	 * @param int    $width           the width of the size variant
-	 * @param int    $height          the height of the size variant
-	 * @param int    $filesize        the filesize of the size variant
+	 * @param SizeVariantType $sizeVariantType the type of the desired size variant;
+	 * @param string          $shortPath       the short path of the media file this
+	 *                                         size variant shall point to
+	 * @param ImageDimension  $dim             the width of the size variant
+	 * @param int             $filesize        the filesize of the size variant
 	 *
 	 * @return SizeVariant The newly created and persisted size variant
 	 *
 	 * @throws IllegalOrderOfOperationException
 	 * @throws ModelDBException
-	 *
-	 * @phpstan-param int<0,6>   $sizeVariantType
 	 */
-	public function create(int $sizeVariantType, string $shortPath, int $width, int $height, int $filesize): SizeVariant
+	public function create(SizeVariantType $sizeVariantType, string $shortPath, ImageDimension $dim, int $filesize): SizeVariant
 	{
 		if (!$this->photo->exists) {
 			throw new IllegalOrderOfOperationException('Cannot create a size variant for a photo whose id is not yet persisted to DB');
 		}
 		try {
-			$result = new SizeVariant();
-			$result->photo_id = $this->photo->id;
-			$result->type = $sizeVariantType;
-			$result->short_path = $shortPath;
-			$result->width = $width;
-			$result->height = $height;
-			$result->filesize = $filesize;
-			$result->save();
+			$result = SizeVariant::create([
+				'photo_id' => $this->photo->id,
+				'storage_disk' => StorageDiskType::LOCAL,
+				'type' => $sizeVariantType,
+				'short_path' => $shortPath,
+				'width' => $dim->width,
+				'height' => $dim->height,
+				'filesize' => $filesize,
+				'ratio' => $dim->getRatio(),
+			]);
 			$this->add($result);
 
 			return $result;
@@ -236,6 +267,7 @@ class SizeVariants extends DTO
 			$this->small?->id,
 			$this->thumb2x?->id,
 			$this->thumb?->id,
+			$this->placeholder?->id,
 		];
 
 		$this->original = null;
@@ -245,6 +277,7 @@ class SizeVariants extends DTO
 		$this->small = null;
 		$this->thumb2x = null;
 		$this->thumb = null;
+		$this->placeholder = null;
 
 		(new Delete())->do(array_diff($ids, [null]))->do();
 	}
@@ -263,6 +296,7 @@ class SizeVariants extends DTO
 		self::replicateSizeVariant($duplicate, $this->small);
 		self::replicateSizeVariant($duplicate, $this->thumb2x);
 		self::replicateSizeVariant($duplicate, $this->thumb);
+		self::replicateSizeVariant($duplicate, $this->placeholder);
 
 		return $duplicate;
 	}
@@ -274,7 +308,33 @@ class SizeVariants extends DTO
 	private static function replicateSizeVariant(SizeVariants $duplicate, ?SizeVariant $sizeVariant): void
 	{
 		if ($sizeVariant !== null) {
-			$duplicate->create($sizeVariant->type, $sizeVariant->short_path, $sizeVariant->width, $sizeVariant->height, $sizeVariant->filesize);
+			$duplicate->create(
+				$sizeVariant->type,
+				$sizeVariant->short_path,
+				new ImageDimension($sizeVariant->width, $sizeVariant->height),
+				$sizeVariant->filesize
+			);
 		}
+	}
+
+	/**
+	 * Returns true if at least one version of medium is not null.
+	 *
+	 * @return bool
+	 */
+	public function hasMedium(): bool
+	{
+		return $this->medium !== null || $this->medium2x !== null;
+	}
+
+	/**
+	 * We don't need to check if small2x or medium2x exists.
+	 * small2x implies small, and same for medium2x, but the opposite is not true!
+	 *
+	 * @return bool
+	 */
+	public function hasMediumOrSmall(): bool
+	{
+		return $this->small !== null || $this->medium !== null;
 	}
 }

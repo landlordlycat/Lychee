@@ -1,38 +1,19 @@
 <?php
 
-use App\Models\Configs;
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
+use App\Legacy\BaseConfigMigration;
 
-class ConfigPublicPhotosHidden extends Migration
-{
-	/**
-	 * Run the migrations.
-	 *
-	 * @return void
-	 */
-	public function up()
+return new class() extends BaseConfigMigration {
+	public function getConfigs(): array
 	{
-		defined('BOOL') or define('BOOL', '0|1');
-
-		DB::table('configs')->insert([
+		return [
 			[
 				'key' => 'public_photos_hidden',
 				'value' => '1',
-				'confidentiality' => 2,
+				'confidentiality' => '2',
 				'cat' => 'config',
-				'type_range' => BOOL,
+				'type_range' => self::BOOL,
+				'description' => '',
 			],
-		]);
+		];
 	}
-
-	/**
-	 * Reverse the migrations.
-	 *
-	 * @return void
-	 */
-	public function down()
-	{
-		Configs::where('key', '=', 'public_photos_hidden')->delete();
-	}
-}
+};
