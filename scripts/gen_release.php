@@ -1,6 +1,12 @@
 #!/usr/bin/env php
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 include_once __DIR__ . '/../vendor/autoload.php';
 
 use function Safe\date;
@@ -8,27 +14,24 @@ use Safe\Exceptions\FilesystemException;
 use function Safe\file_get_contents;
 use function Safe\file_put_contents;
 use function Safe\scandir;
-use function Safe\sprintf;
-use function Safe\substr;
 
 /**
  * Template for migration.
  */
 $template = "<?php
 
-use App\Models\Configs;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
 
-class BumpVersion%s extends Migration
-{
+return new class() extends Migration {
 	/**
 	 * Run the migrations.
 	 *
 	 * @return void
 	 */
-	public function up()
+	public function up(): void
 	{
-		Configs::where('key', 'version')->update(['value' => '%s']);
+		DB::table('configs')->where('key', 'version')->update(['value' => '%s']);
 	}
 
 	/**
@@ -36,17 +39,17 @@ class BumpVersion%s extends Migration
 	 *
 	 * @return void
 	 */
-	public function down()
+	public function down(): void
 	{
-		Configs::where('key', 'version')->update(['value' => '%s']);
+		DB::table('configs')->where('key', 'version')->update(['value' => '%s']);
 	}
-}
+};
 ";
 
 /**
  * We get the current version number.
  *
- * @return array
+ * @return array<int,int>
  */
 function get_version(): array
 {
@@ -66,29 +69,23 @@ function get_version(): array
 /**
  * Given the current version and the update array return the new version number.
  *
- * @param array  $curr_version : current version number
- * @param string $kind         : 'minor' or 'major'
+ * @param array<int,int> $curr_version current version number
+ * @param string         $kind         'minor' or 'major'
  *
- * @return array
+ * @return array<int,int>
  */
 function new_version(array $curr_version, string $kind): array
 {
 	$new_version = $curr_version;
-	switch ($kind) {
-		case 'major':
-			if ($curr_version[1] === 99) {
-				throw new Exception('Maybe it is time for a big change?');
-			}
-			$new_version[1]++;
-			$new_version[2] = 0;
-			break;
-		case 'minor':
-		default:
-			if ($curr_version[2] === 99) {
-				throw new Exception('Maybe it is time for a major release?');
-			}
-			$new_version[2]++;
-			break;
+	if ($kind === 'major') {
+		$new_version[1]++;
+		$new_version[2] = 0;
+	} else {
+		$new_version[2]++;
+	}
+
+	if ($curr_version[1] === 100 || $curr_version[2] === 100) {
+		throw new Exception('Maybe it is time for a big change?');
 	}
 
 	return $new_version;
@@ -96,6 +93,8 @@ function new_version(array $curr_version, string $kind): array
 
 /**
  * encode $version into a string of 6 digits.
+ *
+ * @param array<int,int> $version
  *
  * @return string
  */
@@ -112,6 +111,10 @@ function does_migration_exists(string $version): void
 	$name_candidate = 'bump_version' . $version;
 	$migrations = array_slice(scandir('database/migrations'), 2);
 	foreach ($migrations as $migration) {
+		if (is_dir('database/migrations/' . $migration)) {
+			continue;
+		}
+
 		// given 2020_04_22_155712_bump_version040002.php we retrieve bump_version040002
 		$name = explode('_', $migration, 5);
 		$name = substr($name[4], 0, -4);
@@ -133,7 +136,7 @@ try {
 	does_migration_exists($str_nv);
 
 	$fileName = sprintf('database/migrations/%s_bump_version%s.php', date('Y_m_d_His'), $str_nv);
-	$fileContent = sprintf($template, $str_nv, $str_nv, $str_cv);
+	$fileContent = sprintf($template, $str_nv, $str_cv);
 
 	file_put_contents($fileName, $fileContent);
 	echo "Migration generated!\n";

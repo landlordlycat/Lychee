@@ -1,23 +1,28 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Metadata;
 
 use App\Exceptions\ExternalComponentFailedException;
 use App\Exceptions\ExternalComponentMissingException;
 use App\Exceptions\Handler;
 use App\Exceptions\MediaFileOperationException;
-use App\Image\NativeLocalFile;
+use App\Image\Files\NativeLocalFile;
 use App\Models\Configs;
-use App\Models\Logs;
 use Carbon\Exceptions\InvalidFormatException;
 use Carbon\Exceptions\InvalidTimeZoneException;
 use Illuminate\Support\Carbon;
-use PHPExif\Adapter\NoAdapterException;
-use PHPExif\Exif;
+use Illuminate\Support\Facades\Log;
+use PHPExif\Enum\ReaderType;
+use PHPExif\Reader\PhpExifReaderException;
 use PHPExif\Reader\Reader;
+use Safe\DateTime;
 use Safe\Exceptions\StringsException;
-use function Safe\sha1_file;
-use function Safe\substr;
 
 /**
  * Collects normalized EXIF info about an image/video.
@@ -57,35 +62,17 @@ class Extractor
 	public int $microVideoOffset = 0;
 
 	/**
-	 * Returns the SHA-1 checksum of a file.
-	 *
-	 * @param NativeLocalFile $file the file
-	 *
-	 * @return string the checksum
-	 *
-	 * @throws MediaFileOperationException
-	 */
-	public static function checksum(NativeLocalFile $file): string
-	{
-		try {
-			return sha1_file($file->getAbsolutePath());
-		} catch (StringsException) {
-			throw new MediaFileOperationException('Could not compute checksum for: ' . $file->getAbsolutePath());
-		}
-	}
-
-	/**
 	 * Extracts metadata from a file.
 	 *
-	 * @param NativeLocalFile $file the file
+	 * @param NativeLocalFile $file                 the file
+	 * @param int             $fileLastModifiedTime the timestamp to use if there's no creation date in Exif
 	 *
 	 * @return Extractor
 	 *
 	 * @throws ExternalComponentMissingException
 	 * @throws MediaFileOperationException
-	 * @throws ExternalComponentFailedException
 	 */
-	public static function createFromFile(NativeLocalFile $file): self
+	public static function createFromFile(NativeLocalFile $file, int $fileLastModifiedTime): self
 	{
 		$metadata = new self();
 		$isSupportedVideo = $file->isSupportedVideo();
@@ -97,10 +84,10 @@ class Extractor
 			//  3. Imagick (not for videos, i.e. for supported photos and accepted raw files only)
 			//  4. Native PHP exif reader (last resort)
 			$reader = match (true) {
-				(Configs::hasFFmpeg() && $isSupportedVideo) => Reader::factory(Reader::TYPE_FFPROBE),
-				Configs::hasExiftool() => Reader::factory(Reader::TYPE_EXIFTOOL),
-				(Configs::hasImagick() && !$isSupportedVideo) => Reader::factory(Reader::TYPE_IMAGICK),
-				default => Reader::factory(Reader::TYPE_NATIVE),
+				(Configs::hasFFmpeg() && $isSupportedVideo) => Reader::factory(ReaderType::FFPROBE, Configs::getValueAsString('ffprobe_path')),
+				Configs::hasExiftool() => Reader::factory(ReaderType::EXIFTOOL, Configs::getValueAsString('exiftool_path')),
+				(Configs::hasImagick() && !$isSupportedVideo) => Reader::factory(ReaderType::IMAGICK),
+				default => Reader::factory(ReaderType::NATIVE),
 			};
 
 			// this can throw an exception in the case of Exiftool adapter!
@@ -114,49 +101,36 @@ class Extractor
 			// with a work-around for MP4 videos which are wrongly classified
 			// as `application/octet-stream`, but this work-around only
 			// succeeds if the file has a recognized extension.
-			$exif = $reader->read($file->getAbsolutePath());
-		} catch (\InvalidArgumentException|NoAdapterException $e) {
-			throw new ExternalComponentMissingException('The configured EXIF adapter is not available', $e);
-		} catch (\RuntimeException $e) {
+			$exif = $reader->read($file->getRealPath());
+			// @codeCoverageIgnoreStart
+		} catch (PhpExifReaderException $e) {
 			// thrown by $reader->read if EXIF could not be extracted,
 			// don't give up yet, only log the event
 			Handler::reportSafely($e);
-			$exif = false;
-		}
-
-		if ($exif === false) {
 			try {
-				Logs::notice(__METHOD__, __LINE__, 'Falling back to native adapter.');
+				Log::notice(__METHOD__ . ':' . __LINE__ . ' Falling back to native adapter.');
 				// Use Php native tools
-				$reader = Reader::factory(Reader::TYPE_NATIVE);
-				$exif = $reader->read($file->getAbsolutePath());
-			} catch (\InvalidArgumentException|NoAdapterException $e) {
-				throw new ExternalComponentMissingException('The configured EXIF adapter is not available', $e);
-			} catch (\RuntimeException $e) {
+				$reader = Reader::factory(ReaderType::NATIVE);
+				$exif = $reader->read($file->getRealPath());
+			} catch (PhpExifReaderException $e) {
 				// thrown by $reader->read if EXIF could not be extracted,
 				// even with the native adapter, now we give up
 				throw new MediaFileOperationException('Could not even extract basic EXIF data with the native adapter', $e);
 			}
 		}
-
-		// TODO: By changing the logic of $reader to always return an Exif object or throw an exception, this would make this code safer.
-		if (!$exif instanceof Exif) {
-			throw new MediaFileOperationException('Could not even extract basic EXIF data with the native adapter');
-		}
+		// @codeCoverageIgnoreEnd
 
 		// Attempt to get sidecar metadata if it exists, make sure to check 'real' path in case of symlinks
 		$sidecarData = [];
 
-		$sidecarFile = new NativeLocalFile($file->getAbsolutePath() . '.xmp');
+		$sidecarFile = new NativeLocalFile($file->getPath() . '.xmp');
 
 		if (Configs::hasExiftool() && $sidecarFile->exists()) {
+			// @codeCoverageIgnoreStart
 			try {
 				// Don't use the same reader as the file in case it's a video
-				$sidecarReader = Reader::factory(Reader::TYPE_EXIFTOOL);
-				$sideCarExifData = $sidecarReader->read($sidecarFile->getAbsolutePath());
-				if (!$sideCarExifData instanceof Exif) {
-					throw new MediaFileOperationException('Could not even extract EXIF data with the exiftool adapter');
-				}
+				$sidecarReader = Reader::factory(ReaderType::EXIFTOOL);
+				$sideCarExifData = $sidecarReader->read($sidecarFile->getRealPath());
 				$sidecarData = $sideCarExifData->getData();
 
 				// We don't want to overwrite the media's type with the mimetype of the sidecar file
@@ -170,6 +144,7 @@ class Extractor
 			} catch (\Exception $e) {
 				Handler::reportSafely($e);
 			}
+			// @codeCoverageIgnoreEnd
 		}
 
 		$metadata->type = ($exif->getMimeType() !== false) ? $exif->getMimeType() : $file->getMimeType();
@@ -192,6 +167,14 @@ class Extractor
 		$metadata->microVideoOffset = ($exif->getMicroVideoOffset() !== false) ? (int) $exif->getMicroVideoOffset() : 0;
 
 		$taken_at = $exif->getCreationDate();
+
+		if (
+			$taken_at === false &&
+			Configs::getValueAsBool('use_last_modified_date_when_no_exif_date')
+		) {
+			$taken_at = DateTime::createFromFormat('U', "$fileLastModifiedTime");
+		}
+
 		if ($taken_at !== false) {
 			try {
 				$taken_at = Carbon::instance($taken_at);
@@ -343,11 +326,14 @@ class Extractor
 							// location where the video has been recorded and that
 							// the beholder (of the video) expects to observe
 							// that timezone.
+
+							// @codeCoverageIgnoreStart
 							$taken_at = new Carbon(
 								$taken_at->format('Y-m-d H:i:s'),
 								new \DateTimeZone('UTC')
 							);
 							$taken_at->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+						// @codeCoverageIgnoreEnd
 						} elseif ($taken_at->getTimezone()->getName() === 'Z') {
 							// This one is correctly in Zulu (UTC).
 							// We change the timezone to the application's default
@@ -359,19 +345,19 @@ class Extractor
 							// that timezone.
 							$taken_at->setTimezone(new \DateTimeZone(date_default_timezone_get()));
 						}
-						// In the remaining cases the timezone information was
-						// extracted and the recording time is assumed exhibit
-						// to original timezone of the location where the video
-						// has been recorded.
-						// So we don't need to do anything.
-						//
-						// The only known example are the mov files from Apple
-						// devices; the time zone will be formatted as "+01:00"
-						// so neither of the two conditions above should trigger.
+					// In the remaining cases the timezone information was
+					// extracted and the recording time is assumed exhibit
+					// to original timezone of the location where the video
+					// has been recorded.
+					// So we don't need to do anything.
+					//
+					// The only known example are the mov files from Apple
+					// devices; the time zone will be formatted as "+01:00"
+					// so neither of the two conditions above should trigger.
 					} elseif ($taken_at->getTimezone()->getName() === 'Z') {
 						// This is a video format where we expect the takestamp
 						// to be provided in local time but the timezone is
-						// (erroneuously) set to Zulu (UTC).  This will trigger,
+						// (erroneously) set to Zulu (UTC).  This will trigger,
 						// e.g., for mov files with the FFprobe extractor.
 						// We recreate the recording time as a timestamp in the
 						// application's default timezone.
@@ -380,16 +366,20 @@ class Extractor
 						// location where the video has been recorded and that
 						// the beholder (of the video) expects to observe
 						// that timezone.
+						// @codeCoverageIgnoreStart
 						$taken_at = new Carbon(
 							$taken_at->format('Y-m-d H:i:s'),
 							new \DateTimeZone(date_default_timezone_get())
 						);
+						// @codeCoverageIgnoreEnd
 					}
 				}
 				$metadata->taken_at = $taken_at;
+				// @codeCoverageIgnoreStart
 			} catch (InvalidTimeZoneException|InvalidFormatException $e) {
 				throw new MediaFileOperationException('Could not even extract date/time from EXIF data', $e);
 			}
+		// @codeCoverageIgnoreEnd
 		} else {
 			$metadata->taken_at = null;
 		}
@@ -398,9 +388,11 @@ class Extractor
 		// We set values to null in case we're out of bounds
 		if ($metadata->latitude !== null || $metadata->longitude !== null) {
 			if ($metadata->latitude < -90 || $metadata->latitude > 90 || $metadata->longitude < -180 || $metadata->longitude > 180) {
-				Logs::notice(__METHOD__, __LINE__, 'Latitude/Longitude (' . $metadata->latitude . '/' . $metadata->longitude . ') out of bounds (needs to be between -90/90 and -180/180)');
+				// @codeCoverageIgnoreStart
+				Log::notice(__METHOD__ . ':' . __LINE__ . 'Latitude/Longitude (' . $metadata->latitude . '/' . $metadata->longitude . ') out of bounds (needs to be between -90/90 and -180/180)');
 				$metadata->latitude = null;
 				$metadata->longitude = null;
+				// @codeCoverageIgnoreEnd
 			}
 		}
 
@@ -408,8 +400,10 @@ class Extractor
 		// We set values to null in case we're out of bounds
 		if ($metadata->altitude !== null) {
 			if ($metadata->altitude < -self::ABSOLUTE_ALTITUDE_BOUNDS || $metadata->altitude > self::ABSOLUTE_ALTITUDE_BOUNDS) {
-				Logs::notice(__METHOD__, __LINE__, 'Altitude (' . $metadata->altitude . ') out of bounds for database (needs to be between -999999.9999 and 999999.9999)');
+				// @codeCoverageIgnoreStart
+				Log::notice(__METHOD__ . ':' . __LINE__ . 'Altitude (' . $metadata->altitude . ') out of bounds for database (needs to be between -999999.9999 and 999999.9999)');
 				$metadata->altitude = null;
+				// @codeCoverageIgnoreEnd
 			}
 		}
 
@@ -417,27 +411,39 @@ class Extractor
 		// We set values to null in case we're out of bounds
 		if ($metadata->imgDirection !== null) {
 			if ($metadata->imgDirection < 0 || $metadata->imgDirection > 360) {
-				Logs::notice(__METHOD__, __LINE__, 'GPSImgDirection (' . $metadata->imgDirection . ') out of bounds (needs to be between 0 and 360)');
+				// @codeCoverageIgnoreStart
+				Log::notice(__METHOD__ . ':' . __LINE__ . 'GPSImgDirection (' . $metadata->imgDirection . ') out of bounds (needs to be between 0 and 360)');
 				$metadata->imgDirection = null;
+				// @codeCoverageIgnoreEnd
 			}
 		}
 
 		// Position
 		$fields = [];
 		if ($exif->getCity() !== false) {
+			// @codeCoverageIgnoreStart
 			$fields[] = trim($exif->getCity());
+			// @codeCoverageIgnoreEnd
 		}
 		if ($exif->getSublocation() !== false) {
+			// @codeCoverageIgnoreStart
 			$fields[] = trim($exif->getSublocation());
+			// @codeCoverageIgnoreEnd
 		}
 		if ($exif->getState() !== false) {
+			// @codeCoverageIgnoreStart
 			$fields[] = trim($exif->getState());
+			// @codeCoverageIgnoreEnd
 		}
 		if ($exif->getCountry() !== false) {
+			// @codeCoverageIgnoreStart
 			$fields[] = trim($exif->getCountry());
+			// @codeCoverageIgnoreEnd
 		}
 		if (count($fields) !== 0) {
+			// @codeCoverageIgnoreStart
 			$metadata->position = implode(', ', $fields);
+			// @codeCoverageIgnoreEnd
 		}
 
 		if (!$isSupportedVideo) {
@@ -461,7 +467,7 @@ class Extractor
 		if ($metadata->shutter !== null && $metadata->shutter !== '') {
 			// TODO: If we add the suffix " s" here, we should also normalize the fraction here.
 			// It does not make any sense to strip-off the suffix again in Photo and re-add it again.
-			$metadata->shutter = $metadata->shutter . self::SUFFIX_SEC_UNIT;
+			$metadata->shutter .= self::SUFFIX_SEC_UNIT;
 		}
 
 		// Decode location data, it can be longer than is acceptable for DB that's the reason for substr
@@ -471,10 +477,12 @@ class Extractor
 			if ($metadata->location !== null) {
 				$metadata->location = substr($metadata->location, 0, self::MAX_LOCATION_STRING_LENGTH);
 			}
+			// @codeCoverageIgnoreStart
 		} catch (ExternalComponentFailedException|StringsException $e) {
 			Handler::reportSafely($e);
 			$metadata->location = null;
 		}
+		// @codeCoverageIgnoreEnd
 
 		return $metadata;
 	}

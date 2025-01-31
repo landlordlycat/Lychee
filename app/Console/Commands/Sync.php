@@ -1,18 +1,21 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Console\Commands;
 
 use App\Actions\Import\Exec;
-use App\Actions\Photo\Strategies\ImportMode;
-use App\Contracts\ExternalLycheeException;
+use App\Contracts\Exceptions\ExternalLycheeException;
+use App\DTO\ImportMode;
 use App\Exceptions\ConfigurationKeyMissingException;
 use App\Exceptions\UnexpectedException;
-use App\Facades\AccessControl;
 use App\Models\Album;
 use App\Models\Configs;
-use Exception;
 use Illuminate\Console\Command;
-use function Safe\sprintf;
 use Symfony\Component\Console\Exception\ExceptionInterface as SymfonyConsoleException;
 
 class Sync extends Command
@@ -26,14 +29,14 @@ class Sync extends Command
 	 * @var string
 	 */
 	protected $signature =
-	'lychee:sync ' .
-		'{dir : directory to sync} ' . // string
+		'lychee:sync ' .
+		'{dir* : directory to sync} ' . // string[]
 		'{--album_id= : Album ID to import to} ' . // string or null
-		'{--owner_id=0 : Owner ID of imported photos} ' . // string
+		'{--owner_id=1 : Owner ID of imported photos} ' . // string
 		'{--resync_metadata : Re-sync metadata of existing files}  ' . // bool
 		'{--delete_imported=%s : Delete the original files} ' . // string
 		'{--import_via_symlink=%s : Imports photos from via a symlink instead of copying the files} ' . // string
-		'{--skip_duplicates=%s : Don\'t skip photos and albums if they already exist in the gallery}'; // string
+		'{--skip_duplicates=%s : Skip photos and albums if they already exist in the gallery}'; // string
 
 	/**
 	 * The console command description.
@@ -71,9 +74,9 @@ class Sync extends Command
 	public function handle(): int
 	{
 		try {
-			$directory = $this->argument('dir');
-			if (is_array($directory) || $directory === null) {
-				$this->error('Synchronize one folder at a time.');
+			$directories = $this->argument('dir');
+			if (!is_array($directories)) {
+				$this->error('List of directories not recognized.');
 
 				return 1;
 			}
@@ -106,18 +109,19 @@ class Sync extends Command
 					$importViaSymlink,
 					$resyncMetadata
 				),
+				$owner_id,
 				true,
 				0
 			);
 
-			AccessControl::log_as_id($owner_id);
-
 			$this->info('Start syncing.');
 
-			try {
-				$exec->do($directory, $album);
-			} catch (Exception $e) {
-				$this->error($e);
+			foreach ($directories as $directory) {
+				try {
+					$exec->do($directory, $album);
+				} catch (\Exception $e) {
+					$this->error($e);
+				}
 			}
 
 			$this->info('Done syncing.');

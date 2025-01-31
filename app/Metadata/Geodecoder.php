@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Metadata;
 
 use App\Exceptions\ExternalComponentFailedException;
@@ -13,10 +19,11 @@ use Geocoder\StatefulGeocoder;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\HandlerStack;
 use Illuminate\Contracts\Container\BindingResolutionException;
-use Illuminate\Support\Facades\Cache;
 use Spatie\GuzzleRateLimiterMiddleware\RateLimiterMiddleware;
-use Spatie\GuzzleRateLimiterMiddleware\Store;
 
+/**
+ * @codeCoverageIgnore We know it works.
+ */
 class Geodecoder
 {
 	/**
@@ -95,24 +102,12 @@ class Geodecoder
 				throw new LocationDecodingFailed('Location (' . $latitude . ', ' . $longitude . ') could not be decoded.');
 			}
 
+			/** @disregard P1013 */
 			return $result_list->first()->getDisplayName();
 			// @codeCoverageIgnoreStart
 		} catch (GeocoderException $e) {
 			throw new LocationDecodingFailed('Location (' . $latitude . ', ' . $longitude . ') could not be decoded.', $e);
 		}
 		// @codeCoverageIgnoreEnd
-	}
-}
-
-class RateLimiterStore implements Store
-{
-	public function get(): array
-	{
-		return Cache::get('rate-limiter', []);
-	}
-
-	public function push(int $timestamp, int $limit): void
-	{
-		Cache::put('rate-limiter', array_merge($this->get(), [$timestamp]));
 	}
 }

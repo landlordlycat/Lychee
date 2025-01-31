@@ -1,14 +1,22 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Http\Requests\Album;
 
+use App\Contracts\Http\Requests\HasAlbum;
+use App\Contracts\Http\Requests\HasAlbums;
+use App\Contracts\Http\Requests\RequestAttribute;
 use App\Http\Requests\BaseApiRequest;
-use App\Http\Requests\Contracts\HasAbstractAlbum;
-use App\Http\Requests\Contracts\HasAlbum;
-use App\Http\Requests\Contracts\HasAlbums;
+use App\Http\Requests\Traits\Authorize\AuthorizeCanEditAlbumAlbumsTrait;
 use App\Http\Requests\Traits\HasAlbumsTrait;
 use App\Http\Requests\Traits\HasAlbumTrait;
 use App\Models\Album;
+use App\Rules\AlbumIDRule;
 use App\Rules\RandomIDRule;
 
 /**
@@ -19,15 +27,7 @@ class MoveAlbumsRequest extends BaseApiRequest implements HasAlbum, HasAlbums
 	use HasAlbumTrait;
 	/** @phpstan-use HasAlbumsTrait<Album> */
 	use HasAlbumsTrait;
-
-	/**
-	 * {@inheritDoc}
-	 */
-	public function authorize(): bool
-	{
-		return $this->authorizeAlbumWrite($this->album) &&
-			$this->authorizeAlbumsWrite($this->albums);
-	}
+	use AuthorizeCanEditAlbumAlbumsTrait;
 
 	/**
 	 * {@inheritDoc}
@@ -35,9 +35,9 @@ class MoveAlbumsRequest extends BaseApiRequest implements HasAlbum, HasAlbums
 	public function rules(): array
 	{
 		return [
-			HasAbstractAlbum::ALBUM_ID_ATTRIBUTE => ['present', new RandomIDRule(true)],
-			HasAlbums::ALBUM_IDS_ATTRIBUTE => 'required|array|min:1',
-			HasAlbums::ALBUM_IDS_ATTRIBUTE . '.*' => ['required', new RandomIDRule(false)],
+			RequestAttribute::ALBUM_ID_ATTRIBUTE => ['present', new RandomIDRule(true)],
+			RequestAttribute::ALBUM_IDS_ATTRIBUTE => 'required|array|min:1',
+			RequestAttribute::ALBUM_IDS_ATTRIBUTE . '.*' => ['required', new AlbumIDRule(false)],
 		];
 	}
 
@@ -46,13 +46,14 @@ class MoveAlbumsRequest extends BaseApiRequest implements HasAlbum, HasAlbums
 	 */
 	protected function processValidatedValues(array $values, array $files): void
 	{
-		$targetAlbumID = $values[HasAbstractAlbum::ALBUM_ID_ATTRIBUTE];
-		$this->album = $targetAlbumID === null ?
+		/** @var string|null $id */
+		$id = $values[RequestAttribute::ALBUM_ID_ATTRIBUTE];
+		/** @var array<int,string> $ids */
+		$ids = $values[RequestAttribute::ALBUM_IDS_ATTRIBUTE];
+		$this->album = $id === null ?
 			null :
-			Album::query()->findOrFail($targetAlbumID);
-		// `findOrFail` returns a union type, but we know that it returns the
-		// correct collection in this case
-		// @phpstan-ignore-next-line
-		$this->albums = Album::query()->findOrFail($values[HasAlbums::ALBUM_IDS_ATTRIBUTE]);
+			Album::findOrFail($id);
+		/** @phpstan-ignore-next-line */
+		$this->albums = Album::findOrFail($ids);
 	}
 }

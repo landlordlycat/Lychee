@@ -1,36 +1,30 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\DTO;
 
-use function Safe\sprintf;
+use App\Metadata\Versions\GitHubVersion;
 
-class LycheeGitInfo extends DTO
+class LycheeGitInfo extends ArrayableDTO
 {
 	public string $branch;
 	public string $commit;
 	public string $additional;
 
-	public function __construct(string $branch, string $commit, string $additional)
+	public function __construct(GitHubVersion $gvc)
 	{
-		$this->branch = $branch;
-		$this->commit = $commit;
-		$this->additional = $additional;
+		$this->branch = $gvc->localBranch ?? '??';
+		$this->commit = $gvc->localHead ?? '??';
+		$this->additional = $gvc->getBehindTest();
 	}
 
 	public function toString(): string
 	{
 		return sprintf('%s (%s) -- %s', $this->branch, $this->commit, $this->additional);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	public function toArray(): array
-	{
-		return [
-			'branch' => $this->branch,
-			'commit' => $this->commit,
-			'additional' => $this->additional,
-		];
 	}
 }

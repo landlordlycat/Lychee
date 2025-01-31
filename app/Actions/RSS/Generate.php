@@ -1,12 +1,18 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Actions\RSS;
 
-use App\Actions\PhotoAuthorisationProvider;
-use App\Contracts\InternalLycheeException;
+use App\Contracts\Exceptions\InternalLycheeException;
 use App\Exceptions\Internal\FrameworkException;
 use App\Models\Configs;
 use App\Models\Photo;
+use App\Policies\PhotoQueryPolicy;
 use Carbon\Exceptions\InvalidFormatException;
 use Carbon\Exceptions\UnitException;
 use Illuminate\Support\Carbon;
@@ -15,17 +21,17 @@ use Spatie\Feed\FeedItem;
 
 class Generate
 {
-	protected PhotoAuthorisationProvider $photoAuthorisationProvider;
+	protected PhotoQueryPolicy $photoQueryPolicy;
 
-	public function __construct(PhotoAuthorisationProvider $photoAuthorisationProvider)
+	public function __construct(PhotoQueryPolicy $photoQueryPolicy)
 	{
-		$this->photoAuthorisationProvider = $photoAuthorisationProvider;
+		$this->photoQueryPolicy = $photoQueryPolicy;
 	}
 
 	private function create_link_to_page(Photo $photo_model): string
 	{
 		if ($photo_model->album_id !== null) {
-			return url('/#' . $photo_model->album_id . '/' . $photo_model->id);
+			return url('/gallery/' . $photo_model->album_id . '/' . $photo_model->id);
 		}
 
 		return url('/view?p=' . $photo_model->id);
@@ -51,7 +57,7 @@ class Generate
 	}
 
 	/**
-	 * @return Collection<FeedItem>
+	 * @return Collection<int,FeedItem>
 	 *
 	 * @throws InternalLycheeException
 	 */
@@ -65,9 +71,12 @@ class Generate
 			throw new FrameworkException('Date/Time component (Carbon)', $e);
 		}
 
-		$photos = $this->photoAuthorisationProvider
+		/** @var Collection<int,Photo> $photos */
+		$photos = $this->photoQueryPolicy
 			->applySearchabilityFilter(
-				Photo::with(['album', 'owner', 'size_variants', 'size_variants.sym_links'])
+				query: Photo::query()->with(['album', 'owner', 'size_variants', 'size_variants.sym_links']),
+				origin: null,
+				include_nsfw: !Configs::getValueAsBool('hide_nsfw_in_rss')
 			)
 			->where('photos.created_at', '>=', $nowMinus)
 			->limit($rss_max)

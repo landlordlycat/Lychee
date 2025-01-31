@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Actions\SizeVariant;
 
 use App\Exceptions\Internal\LycheeAssertionError;
@@ -60,9 +66,9 @@ class Delete
 			// Get all short paths of size variants which are going to be deleted.
 			// But exclude those short paths which are duplicated by a size
 			// variant which is not going to be deleted.
-			$svShortPaths = SizeVariant::query()
+			$sizeVariants = SizeVariant::query()
 				->from('size_variants as sv')
-				->select(['sv.short_path'])
+				->select(['sv.short_path', 'sv.storage_disk'])
 				->leftJoin('size_variants as dup', function (JoinClause $join) use ($svIDs) {
 					$join
 						->on('dup.short_path', '=', 'sv.short_path')
@@ -70,8 +76,8 @@ class Delete
 				})
 				->whereIn('sv.id', $svIDs)
 				->whereNull('dup.id')
-				->pluck('sv.short_path');
-			$fileDeleter->addRegularFilesOrSymbolicLinks($svShortPaths);
+				->get();
+			$fileDeleter->addSizeVariants($sizeVariants);
 
 			// Get all short paths of symbolic links which point to size variants
 			// which are going to be deleted
@@ -90,10 +96,12 @@ class Delete
 				->delete();
 
 			return $fileDeleter;
+			// @codeCoverageIgnoreStart
 		} catch (QueryBuilderException $e) {
 			throw ModelDBException::create('size variants', 'deleting', $e);
 		} catch (\InvalidArgumentException $e) {
 			throw LycheeAssertionError::createFromUnexpectedException($e);
 		}
+		// @codeCoverageIgnoreEnd
 	}
 }

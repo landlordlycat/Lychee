@@ -1,11 +1,19 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Actions\Photo;
 
+use App\Enum\SizeVariantType;
 use App\Exceptions\Internal\LycheeAssertionError;
 use App\Exceptions\Internal\QueryBuilderException;
 use App\Exceptions\ModelDBException;
 use App\Image\FileDeleter;
+use App\Models\Album;
 use App\Models\Photo;
 use App\Models\SizeVariant;
 use App\Models\SymLink;
@@ -34,7 +42,7 @@ use Illuminate\Database\Query\JoinClause;
  * Hence, this method collects all files which need to be removed.
  * The caller can then decide to delete them asynchronously.
  */
-class Delete
+readonly class Delete
 {
 	protected FileDeleter $fileDeleter;
 
@@ -70,6 +78,7 @@ class Delete
 	 */
 	public function do(array $photoIDs, array $albumIDs = []): FileDeleter
 	{
+		// TODO: replace this with pipelines, This is typically the kind of pattern.
 		try {
 			$this->collectSizeVariantPathsByPhotoID($photoIDs);
 			$this->collectSizeVariantPathsByAlbumID($albumIDs);
@@ -78,9 +87,12 @@ class Delete
 			$this->collectSymLinksByPhotoID($photoIDs);
 			$this->collectSymLinksByAlbumID($albumIDs);
 			$this->deleteDBRecords($photoIDs, $albumIDs);
+			// @codeCoverageIgnoreStart
 		} catch (QueryBuilderException $e) {
 			throw ModelDBException::create('photos', 'deleting', $e);
 		}
+		// @codeCoverageIgnoreEnd
+		Album::query()->whereIn('header_id', $photoIDs)->update(['header_id' => null]);
 
 		return $this->fileDeleter;
 	}
@@ -92,7 +104,7 @@ class Delete
 	 * Size variants which belong to a photo which has a duplicate that is
 	 * not going to be deleted are skipped.
 	 *
-	 * @param array $photoIDs the photo IDs
+	 * @param array<int,string> $photoIDs the photo IDs
 	 *
 	 * @return void
 	 *
@@ -105,9 +117,10 @@ class Delete
 				return;
 			}
 
-			$svShortPaths = SizeVariant::query()
+			// Maybe consider doing multiple queries for the different storage types.
+			$sizeVariants = SizeVariant::query()
 				->from('size_variants as sv')
-				->select(['sv.short_path'])
+				->select(['sv.short_path', 'sv.storage_disk'])
 				->join('photos as p', 'p.id', '=', 'sv.photo_id')
 				->leftJoin('photos as dup', function (JoinClause $join) use ($photoIDs) {
 					$join
@@ -116,11 +129,13 @@ class Delete
 				})
 				->whereIn('p.id', $photoIDs)
 				->whereNull('dup.id')
-				->pluck('sv.short_path');
-			$this->fileDeleter->addRegularFilesOrSymbolicLinks($svShortPaths);
+				->get();
+			$this->fileDeleter->addSizeVariants($sizeVariants);
+			// @codeCoverageIgnoreStart
 		} catch (\InvalidArgumentException $e) {
 			throw LycheeAssertionError::createFromUnexpectedException($e);
 		}
+		// @codeCoverageIgnoreEnd
 	}
 
 	/**
@@ -130,7 +145,7 @@ class Delete
 	 * Size variants which belong to a photo which has a duplicate that is
 	 * not going to be deleted are skipped.
 	 *
-	 * @param array $albumIDs the album IDs
+	 * @param array<int,string> $albumIDs the album IDs
 	 *
 	 * @return void
 	 *
@@ -143,9 +158,10 @@ class Delete
 				return;
 			}
 
-			$svShortPaths = SizeVariant::query()
+			// Maybe consider doing multiple queries for the different storage types.
+			$sizeVariants = SizeVariant::query()
 				->from('size_variants as sv')
-				->select(['sv.short_path'])
+				->select(['sv.short_path', 'sv.storage_disk'])
 				->join('photos as p', 'p.id', '=', 'sv.photo_id')
 				->leftJoin('photos as dup', function (JoinClause $join) use ($albumIDs) {
 					$join
@@ -154,11 +170,13 @@ class Delete
 				})
 				->whereIn('p.album_id', $albumIDs)
 				->whereNull('dup.id')
-				->pluck('sv.short_path');
-			$this->fileDeleter->addRegularFilesOrSymbolicLinks($svShortPaths);
+				->get();
+			$this->fileDeleter->addSizeVariants($sizeVariants);
+			// @codeCoverageIgnoreStart
 		} catch (\InvalidArgumentException $e) {
 			throw LycheeAssertionError::createFromUnexpectedException($e);
 		}
+		// @codeCoverageIgnoreEnd
 	}
 
 	/**
@@ -168,7 +186,7 @@ class Delete
 	 * Live photos which have a duplicate that is not going to be deleted are
 	 * skipped.
 	 *
-	 * @param array $photoIDs the photo IDs
+	 * @param array<int,string> $photoIDs the photo IDs
 	 *
 	 * @return void
 	 *
@@ -183,7 +201,12 @@ class Delete
 
 			$livePhotoShortPaths = Photo::query()
 				->from('photos as p')
-				->select(['p.live_photo_short_path'])
+				->select(['p.live_photo_short_path', 'sv.storage_disk'])
+				->join('size_variants as sv', function (JoinClause $join) {
+					$join
+						->on('sv.photo_id', '=', 'p.id')
+						->where('sv.type', '=', SizeVariantType::ORIGINAL);
+				})
 				->leftJoin('photos as dup', function (JoinClause $join) use ($photoIDs) {
 					$join
 						->on('dup.live_photo_checksum', '=', 'p.live_photo_checksum')
@@ -192,11 +215,19 @@ class Delete
 				->whereIn('p.id', $photoIDs)
 				->whereNull('dup.id')
 				->whereNotNull('p.live_photo_short_path')
-				->pluck('p.live_photo_short_path');
-			$this->fileDeleter->addRegularFilesOrSymbolicLinks($livePhotoShortPaths);
+				->get(['p.live_photo_short_path', 'sv.storage_disk']);
+
+			$liveVariantsShortPathsGrouped = $livePhotoShortPaths->groupBy('storage_disk');
+			$liveVariantsShortPathsGrouped->each(
+				fn ($liveVariantsShortPaths, $disk) =>
+					/** @phpstan-ignore-next-line */
+					$this->fileDeleter->addFiles($liveVariantsShortPaths->map(fn ($lv) => $lv->live_photo_short_path), $disk)
+			);
+			// @codeCoverageIgnoreStart
 		} catch (\InvalidArgumentException $e) {
 			throw LycheeAssertionError::createFromUnexpectedException($e);
 		}
+		// @codeCoverageIgnoreEnd
 	}
 
 	/**
@@ -206,7 +237,7 @@ class Delete
 	 * Live photos which have a duplicate that is not going to be deleted are
 	 * skipped.
 	 *
-	 * @param array $albumIDs the album IDs
+	 * @param array<int,string> $albumIDs the album IDs
 	 *
 	 * @return void
 	 *
@@ -221,7 +252,12 @@ class Delete
 
 			$livePhotoShortPaths = Photo::query()
 				->from('photos as p')
-				->select(['p.live_photo_short_path'])
+				->select(['p.live_photo_short_path', 'sv.storage_disk'])
+				->join('size_variants as sv', function (JoinClause $join) {
+					$join
+						->on('sv.photo_id', '=', 'p.id')
+						->where('sv.type', '=', SizeVariantType::ORIGINAL);
+				})
 				->leftJoin('photos as dup', function (JoinClause $join) use ($albumIDs) {
 					$join
 						->on('dup.live_photo_checksum', '=', 'p.live_photo_checksum')
@@ -230,17 +266,24 @@ class Delete
 				->whereIn('p.album_id', $albumIDs)
 				->whereNull('dup.id')
 				->whereNotNull('p.live_photo_short_path')
-				->pluck('p.live_photo_short_path');
-			$this->fileDeleter->addRegularFilesOrSymbolicLinks($livePhotoShortPaths);
+				->get(['p.live_photo_short_path', 'sv.storage_disk']);
+
+			$liveVariantsShortPathsGrouped = $livePhotoShortPaths->groupBy('storage_disk');
+			$liveVariantsShortPathsGrouped->each(
+				/** @phpstan-ignore-next-line */
+				fn ($liveVariantsShortPaths, $disk) => $this->fileDeleter->addFiles($liveVariantsShortPaths->map(fn ($lv) => $lv->live_photo_short_path), $disk)
+			);
+			// @codeCoverageIgnoreStart
 		} catch (\InvalidArgumentException $e) {
 			throw LycheeAssertionError::createFromUnexpectedException($e);
 		}
+		// @codeCoverageIgnoreEnd
 	}
 
 	/**
 	 * Collects all symbolic links which shall be deleted from disk.
 	 *
-	 * @param array $photoIDs the photo IDs
+	 * @param array<int,string> $photoIDs the photo IDs
 	 *
 	 * @return void
 	 *
@@ -260,15 +303,17 @@ class Delete
 				->whereIn('sv.photo_id', $photoIDs)
 				->pluck('sl.short_path');
 			$this->fileDeleter->addSymbolicLinks($symLinkPaths);
+			// @codeCoverageIgnoreStart
 		} catch (\InvalidArgumentException $e) {
 			throw LycheeAssertionError::createFromUnexpectedException($e);
 		}
+		// @codeCoverageIgnoreEnd
 	}
 
 	/**
 	 * Collects all symbolic links which shall be deleted from disk.
 	 *
-	 * @param array $albumIDs the album IDs
+	 * @param array<int,string> $albumIDs the album IDs
 	 *
 	 * @return void
 	 *
@@ -289,9 +334,11 @@ class Delete
 				->whereIn('p.album_id', $albumIDs)
 				->pluck('sl.short_path');
 			$this->fileDeleter->addSymbolicLinks($symLinkPaths);
+			// @codeCoverageIgnoreStart
 		} catch (\InvalidArgumentException $e) {
 			throw LycheeAssertionError::createFromUnexpectedException($e);
 		}
+		// @codeCoverageIgnoreEnd
 	}
 
 	/**
@@ -300,8 +347,8 @@ class Delete
 	 * The records are deleted in such an order that foreign keys are not
 	 * broken.
 	 *
-	 * @param array $photoIDs the photo IDs
-	 * @param array $albumIDs the album IDs
+	 * @param array<int,string> $photoIDs the photo IDs
+	 * @param array<int,string> $albumIDs the album IDs
 	 *
 	 * @return void
 	 *
@@ -352,8 +399,10 @@ class Delete
 			if (count($albumIDs) !== 0) {
 				Photo::query()->whereIn('album_id', $albumIDs)->delete();
 			}
+			// @codeCoverageIgnoreStart
 		} catch (\InvalidArgumentException $e) {
 			throw LycheeAssertionError::createFromUnexpectedException($e);
 		}
+		// @codeCoverageIgnoreEnd
 	}
 }

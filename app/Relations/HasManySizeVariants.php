@@ -1,8 +1,14 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Relations;
 
-use App\Contracts\InternalLycheeException;
+use App\Contracts\Exceptions\InternalLycheeException;
 use App\Exceptions\Internal\FrameworkException;
 use App\Exceptions\Internal\LycheeInvalidArgumentException;
 use App\Models\Extensions\SizeVariants;
@@ -15,6 +21,9 @@ use Illuminate\Database\Eloquent\JsonEncodingException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @extends HasMany<SizeVariant,Photo>
+ */
 class HasManySizeVariants extends HasMany
 {
 	public function __construct(Photo $owningPhoto)
@@ -56,10 +65,10 @@ class HasManySizeVariants extends HasMany
 	/**
 	 * Initialize the relation on a set of models.
 	 *
-	 * @param array  $models
-	 * @param string $relation
+	 * @param Photo[] $models
+	 * @param string  $relation
 	 *
-	 * @return array
+	 * @return array<int,Photo>
 	 */
 	public function initRelation(array $models, $relation): array
 	{
@@ -82,11 +91,11 @@ class HasManySizeVariants extends HasMany
 	 * but additionally sets the reverse association of the child object
 	 * back to its parent object.
 	 *
-	 * @param array      $models   an array of parent models
-	 * @param Collection $results  the unified collection of all child models of all parent models
-	 * @param string     $relation the name of the relation from the parent to the child models
+	 * @param Photo[]                     $models   an array of parent models
+	 * @param Collection<int,SizeVariant> $results  the unified collection of all child models of all parent models
+	 * @param string                      $relation the name of the relation from the parent to the child models
 	 *
-	 * @return array
+	 * @return array<int,Photo>
 	 */
 	public function match(array $models, Collection $results, $relation): array
 	{
@@ -98,7 +107,7 @@ class HasManySizeVariants extends HasMany
 		/** @var Photo $model */
 		foreach ($models as $model) {
 			if (isset($dictionary[$key = $this->getDictionaryKey($model->getAttribute($this->localKey))])) {
-				/** @var Collection $childrenOfModel */
+				/** @var Collection<int,SizeVariant> $childrenOfModel */
 				$childrenOfModel = $this->getRelationValue($dictionary, $key, 'many');
 				$model->setRelation($relation, new SizeVariants($model, $childrenOfModel));
 			}
