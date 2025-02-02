@@ -1,14 +1,22 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Http\Requests\Album;
 
+use App\Contracts\Http\Requests\HasAlbum;
+use App\Contracts\Http\Requests\HasAlbums;
+use App\Contracts\Http\Requests\RequestAttribute;
 use App\Http\Requests\BaseApiRequest;
-use App\Http\Requests\Contracts\HasAbstractAlbum;
-use App\Http\Requests\Contracts\HasAlbum;
-use App\Http\Requests\Contracts\HasAlbums;
+use App\Http\Requests\Traits\Authorize\AuthorizeCanEditAlbumAlbumsTrait;
 use App\Http\Requests\Traits\HasAlbumsTrait;
 use App\Http\Requests\Traits\HasAlbumTrait;
 use App\Models\Album;
+use App\Rules\AlbumIDRule;
 use App\Rules\RandomIDRule;
 
 /**
@@ -19,15 +27,7 @@ class MergeAlbumsRequest extends BaseApiRequest implements HasAlbum, HasAlbums
 	use HasAlbumTrait;
 	/** @phpstan-use HasAlbumsTrait<Album> */
 	use HasAlbumsTrait;
-
-	/**
-	 * {@inheritDoc}
-	 */
-	public function authorize(): bool
-	{
-		return $this->authorizeAlbumWrite($this->album) &&
-			$this->authorizeAlbumsWrite($this->albums);
-	}
+	use AuthorizeCanEditAlbumAlbumsTrait;
 
 	/**
 	 * {@inheritDoc}
@@ -35,9 +35,9 @@ class MergeAlbumsRequest extends BaseApiRequest implements HasAlbum, HasAlbums
 	public function rules(): array
 	{
 		return [
-			HasAbstractAlbum::ALBUM_ID_ATTRIBUTE => ['required', new RandomIDRule(false)],
-			HasAlbums::ALBUM_IDS_ATTRIBUTE => 'required|array|min:1',
-			HasAlbums::ALBUM_IDS_ATTRIBUTE . '.*' => ['required', new RandomIDRule(false)],
+			RequestAttribute::ALBUM_ID_ATTRIBUTE => ['required', new RandomIDRule(false)],
+			RequestAttribute::ALBUM_IDS_ATTRIBUTE => 'required|array|min:1',
+			RequestAttribute::ALBUM_IDS_ATTRIBUTE . '.*' => ['required', new AlbumIDRule(false)],
 		];
 	}
 
@@ -46,14 +46,14 @@ class MergeAlbumsRequest extends BaseApiRequest implements HasAlbum, HasAlbums
 	 */
 	protected function processValidatedValues(array $values, array $files): void
 	{
-		$this->album = Album::query()->findOrFail($values[HasAbstractAlbum::ALBUM_ID_ATTRIBUTE]);
-		// `findOrFail` returns a union type, but we know that it returns the
-		// correct collection in this case
-		// TODO: As part of our `FixedQueryBuilder` we should also consider adding a method `findManyOrFail` which does not return an union type, but only a `Collection`.
-		// This would avoid using phpstan-ignore-next-line here and in many similar cases.
+		/** @var string $id */
+		$id = $values[RequestAttribute::ALBUM_ID_ATTRIBUTE];
+		/** @var array<int,string> $ids */
+		$ids = $values[RequestAttribute::ALBUM_IDS_ATTRIBUTE];
+		$this->album = Album::query()->findOrFail($id);
 		// @phpstan-ignore-next-line
 		$this->albums = Album::query()
 			->with(['children'])
-			->findOrFail($values[HasAlbums::ALBUM_IDS_ATTRIBUTE]);
+			->findOrFail($ids);
 	}
 }

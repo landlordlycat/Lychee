@@ -1,10 +1,19 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\DTO;
 
 use Illuminate\Support\Str;
 
-class BacktraceRecord extends DTO
+/**
+ * @extends AbstractDTO<string>
+ */
+class BacktraceRecord extends AbstractDTO
 {
 	public const UNKNOWN_PLACEHOLDER = '<unknown>';
 	public const NAMESPACE_SEPARATOR = '::';

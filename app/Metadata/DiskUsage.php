@@ -1,12 +1,19 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Metadata;
 
+use App\Facades\Helpers;
+use Illuminate\Support\Facades\Storage;
 use function Safe\disk_free_space;
 use function Safe\disk_total_space;
+use function Safe\exec;
 use function Safe\filesize;
-use function Safe\sprintf;
-use function Safe\substr;
 
 class DiskUsage
 {
@@ -23,27 +30,6 @@ class DiskUsage
 	}
 
 	/**
-	 * From https://www.php.net/manual/en/function.disk-total-space.php.
-	 *
-	 * @param float $bytes
-	 *
-	 * @return string
-	 */
-	public function getSymbolByQuantity(float $bytes): string
-	{
-		$symbols = [
-			'B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB',
-		];
-		$exp = intval(floor(log($bytes) / log(1024)));
-
-		return sprintf(
-			'%.2f %s',
-			($bytes / pow(1024, $exp)),
-			$symbols[$exp]
-		);
-	}
-
-	/**
 	 * from https://stackoverflow.com/questions/478121/how-to-get-directory-size-in-php.
 	 *
 	 * @param string $dir
@@ -56,7 +42,7 @@ class DiskUsage
 
 		if (is_dir($dir) === true) {
 			// If on a Unix Host (Linux, Mac OS)
-			if (!$this->is_win()) {
+			if (!$this->is_win() && Helpers::isExecAvailable()) {
 				$command = "ls -ltrR {$dir} |awk '{print $5}'|awk 'BEGIN{sum=0} {sum=sum+$1} END {print sum}' 2>&1";
 				exec($command, $output);
 				$size = $output[0] ?? 0;
@@ -96,7 +82,7 @@ class DiskUsage
 		// TODO : FIX TO USE STORAGE FACADE => uploads may not be in public/uploads
 		$dts = disk_total_space(base_path(''));
 
-		return $this->getSymbolByQuantity($dts);
+		return Helpers::getSymbolByQuantity($dts);
 	}
 
 	/**
@@ -109,7 +95,7 @@ class DiskUsage
 		// TODO : FIX TO USE STORAGE FACADE => uploads may not be in public/uploads
 		$dfs = disk_free_space(base_path(''));
 
-		return $this->getSymbolByQuantity($dfs);
+		return Helpers::getSymbolByQuantity($dfs);
 	}
 
 	/**
@@ -135,7 +121,7 @@ class DiskUsage
 	{
 		$ds = $this->getTotalSize(base_path(''));
 
-		return $this->getSymbolByQuantity($ds);
+		return Helpers::getSymbolByQuantity($ds);
 	}
 
 	/**
@@ -145,9 +131,8 @@ class DiskUsage
 	 */
 	public function get_lychee_upload_space(): string
 	{
-		// TODO : FIX TO USE STORAGE FACADE => uploads may not be in public/uploads
-		$ds = $this->getTotalSize(base_path('public/uploads/'));
+		$ds = $this->getTotalSize(Storage::disk('images')->path(''));
 
-		return $this->getSymbolByQuantity($ds);
+		return Helpers::getSymbolByQuantity($ds);
 	}
 }

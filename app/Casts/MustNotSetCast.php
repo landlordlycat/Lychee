@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Casts;
 
 use App\Exceptions\Internal\IllegalOrderOfOperationException;
@@ -40,18 +46,18 @@ class MustNotSetCast implements CastsInboundAttributes
 	 * This mutator always throws an exception and thus prevents the attribute
 	 * from being altered.
 	 *
-	 * @param Model  $model      the model which owns the attribute
-	 * @param string $key        the name of attribute which has been
-	 *                           attempted to be set
-	 * @param mixed  $value      the value which has been attempted to assign
-	 *                           to the attribute
-	 * @param array  $attributes all attributes of the model
+	 * @param Model               $model      the model which owns the attribute
+	 * @param string              $key        the name of attribute which has been
+	 *                                        attempted to be set
+	 * @param mixed               $value      the value which has been attempted to assign
+	 *                                        to the attribute
+	 * @param array<string,mixed> $attributes all attributes of the model
 	 *
 	 * @return void
 	 *
 	 * @throws IllegalOrderOfOperationException
 	 */
-	public function set($model, string $key, $value, array $attributes): void
+	public function set(Model $model, string $key, mixed $value, array $attributes): void
 	{
 		$msg = 'must not set read-only attribute \'' . get_class($model) . '::$' . $key . '\' directly';
 		if ($this->alternative !== null) {

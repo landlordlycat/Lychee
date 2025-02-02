@@ -1,22 +1,26 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 use Carbon\Carbon;
 use Carbon\Exceptions\InvalidFormatException;
 use Doctrine\DBAL\Exception as DBALException;
-use Doctrine\DBAL\Schema\AbstractSchemaManager;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
-use Kalnoy\Nestedset\Node;
-use Kalnoy\Nestedset\NodeTrait;
-use League\Flysystem\FileNotFoundException;
 use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Output\ConsoleOutput;
 use Symfony\Component\Console\Output\ConsoleSectionOutput;
+
+require_once 'TemporaryModels/RefactorAlbumModel_AlbumModel.php';
+require_once 'TemporaryModels/OptimizeTables.php';
 
 /**
  * Migration for new architecture of albums.
@@ -66,14 +70,12 @@ use Symfony\Component\Console\Output\ConsoleSectionOutput;
  * (At least, if we want to keep foreign constraints in SQLite.)
  * Yikes! :-(
  */
-class RefactorModels extends Migration
-{
-	private string $driverName;
-	private AbstractSchemaManager $schemaManager;
+return new class() extends Migration {
 	private ConsoleOutput $output;
 	/** @var ProgressBar[] */
 	private array $progressBars;
 	private ConsoleSectionOutput $msgSection;
+	private OptimizeTables $optimize;
 
 	private const SQL_TIMEZONE_NAME = 'UTC';
 	private const SQL_DATETIME_FORMAT = 'Y-m-d H:i:s';
@@ -184,20 +186,16 @@ class RefactorModels extends Migration
 	 */
 	public function __construct()
 	{
-		$connection = Schema::connection(null)->getConnection();
-		$this->driverName = $connection->getDriverName();
-		$this->schemaManager = $connection->getDoctrineSchemaManager();
 		$this->output = new ConsoleOutput();
 		$this->progressBars = [];
 		$this->msgSection = $this->output->section();
+		$this->optimize = new OptimizeTables();
 	}
 
 	/**
 	 * Outputs an error message.
 	 *
 	 * @param string $msg the message
-	 *
-	 * @return void
 	 */
 	private function printError(string $msg): void
 	{
@@ -208,8 +206,6 @@ class RefactorModels extends Migration
 	 * Outputs a warning.
 	 *
 	 * @param string $msg the message
-	 *
-	 * @return void
 	 */
 	private function printWarning(string $msg): void
 	{
@@ -220,8 +216,6 @@ class RefactorModels extends Migration
 	 * Outputs an informational message.
 	 *
 	 * @param string $msg the message
-	 *
-	 * @return void
 	 */
 	private function printInfo(string $msg): void
 	{
@@ -258,7 +252,7 @@ class RefactorModels extends Migration
 	 * @throws InvalidArgumentException
 	 * @throws RuntimeException
 	 */
-	public function up()
+	public function up(): void
 	{
 		$this->printInfo('Checking consistency of DB');
 		$this->ensureDBConsistency();
@@ -304,7 +298,7 @@ class RefactorModels extends Migration
 	/**
 	 * @throws InvalidArgumentException
 	 */
-	public function down()
+	public function down(): void
 	{
 		Schema::drop('sym_links');
 
@@ -355,46 +349,46 @@ class RefactorModels extends Migration
 	private function renameTables(): void
 	{
 		Schema::table('albums', function (Blueprint $table) {
-			$this->dropForeignIfExists($table, 'albums_owner_id_foreign');
+			$this->optimize->dropForeignIfExists($table, 'albums_owner_id_foreign');
 			// We must remove any foreign link from `albums` to `photos` to
 			// break up circular dependencies.
-			$this->dropForeignIfExists($table, 'albums_cover_id_foreign');
-			$this->dropForeignIfExists($table, 'albums_parent_id_foreign');
-			$this->dropIndexIfExists($table, 'albums__lft__rgt_index');
+			$this->optimize->dropForeignIfExists($table, 'albums_cover_id_foreign');
+			$this->optimize->dropForeignIfExists($table, 'albums_parent_id_foreign');
+			$this->optimize->dropIndexIfExists($table, 'albums__lft__rgt_index');
 		});
 		Schema::rename('albums', 'albums_tmp');
 		Schema::table('photos', function (Blueprint $table) {
-			$this->dropForeignIfExists($table, 'photos_album_id_foreign');
-			$this->dropForeignIfExists($table, 'photos_owner_id_foreign');
-			$this->dropIndexIfExists($table, 'photos_created_at_index');
-			$this->dropIndexIfExists($table, 'photos_updated_at_index');
-			$this->dropIndexIfExists($table, 'photos_taken_at_index');
-			$this->dropIndexIfExists($table, 'photos_original_checksum_index');
-			$this->dropIndexIfExists($table, 'photos_checksum_index');
-			$this->dropIndexIfExists($table, 'photos_live_photo_content_id_index');
-			$this->dropIndexIfExists($table, 'photos_livephotocontentid_index');
-			$this->dropIndexIfExists($table, 'photos_live_photo_checksum_index');
-			$this->dropIndexIfExists($table, 'photos_livephotochecksum_index');
-			$this->dropIndexIfExists($table, 'photos_is_public_index');
-			$this->dropIndexIfExists($table, 'photos_is_starred_index');
-			$this->dropIndexIfExists($table, 'photos_album_id_taken_at_index');
-			$this->dropIndexIfExists($table, 'photos_album_id_created_at_index');
-			$this->dropIndexIfExists($table, 'photos_album_id_is_starred_index');
-			$this->dropIndexIfExists($table, 'photos_album_id_is_public_index');
-			$this->dropIndexIfExists($table, 'photos_album_id_type_index');
-			$this->dropIndexIfExists($table, 'photos_album_id_is_starred_created_at_index');
-			$this->dropIndexIfExists($table, 'photos_album_id_is_starred_taken_at_index');
-			$this->dropIndexIfExists($table, 'photos_album_id_is_starred_is_public_index');
-			$this->dropIndexIfExists($table, 'photos_album_id_is_starred_type_index');
+			$this->optimize->dropForeignIfExists($table, 'photos_album_id_foreign');
+			$this->optimize->dropForeignIfExists($table, 'photos_owner_id_foreign');
+			$this->optimize->dropIndexIfExists($table, 'photos_created_at_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_updated_at_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_taken_at_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_original_checksum_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_checksum_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_live_photo_content_id_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_livephotocontentid_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_live_photo_checksum_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_livephotochecksum_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_is_public_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_is_starred_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_album_id_taken_at_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_album_id_created_at_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_album_id_is_starred_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_album_id_is_public_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_album_id_type_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_album_id_is_starred_created_at_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_album_id_is_starred_taken_at_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_album_id_is_starred_is_public_index');
+			$this->optimize->dropIndexIfExists($table, 'photos_album_id_is_starred_type_index');
 		});
 		Schema::rename('photos', 'photos_tmp');
 		Schema::table('web_authn_credentials', function (Blueprint $table) {
-			$this->dropForeignIfExists($table, 'web_authn_credentials_user_id_foreign');
+			$this->optimize->dropForeignIfExists($table, 'web_authn_credentials_user_id_foreign');
 		});
 		Schema::rename('web_authn_credentials', 'web_authn_credentials_tmp');
 		Schema::table('users', function (Blueprint $table) {
-			$this->dropUniqueIfExists($table, 'users_username_unique');
-			$this->dropUniqueIfExists($table, 'users_email_unique');
+			$this->optimize->dropUniqueIfExists($table, 'users_username_unique');
+			$this->optimize->dropUniqueIfExists($table, 'users_email_unique');
 		});
 		Schema::rename('users', 'users_tmp');
 		$this->renamePageContentTable();
@@ -464,8 +458,6 @@ class RefactorModels extends Migration
 	 * Eventually, we would end up with re-creating the whole DB again. :-(
 	 * Hence, we bring forward this migration when we re-create the whole DB
 	 * anyway.
-	 *
-	 * @return void
 	 */
 	private function createUsersTableUp(): void
 	{
@@ -484,8 +476,6 @@ class RefactorModels extends Migration
 
 	/**
 	 * Creates the old table `users`.
-	 *
-	 * @return void
 	 */
 	private function createUsersTableDown(): void
 	{
@@ -962,8 +952,6 @@ class RefactorModels extends Migration
 	 * Essentially, the table schema becomes immutable.
 	 * The only possible action left which does not trigger an exception is to
 	 * drop the table.
-	 *
-	 * @return void
 	 */
 	private function renamePageContentTable(): void
 	{
@@ -1428,7 +1416,7 @@ class RefactorModels extends Migration
 				if ($sizeVariant->short_path !== $expectedShortPath) {
 					try {
 						Storage::move($sizeVariant->short_path, $expectedShortPath);
-					} catch (FileNotFoundException $e) {
+					} catch (\Throwable $e) {
 						// sic! just ignore
 						// This exception is thrown if there are duplicate
 						// photos which point to the same physical file.
@@ -1471,8 +1459,6 @@ class RefactorModels extends Migration
 	/**
 	 * Copies those table which have not changed structurally, but whose
 	 * date/time precision has changed.
-	 *
-	 * @return void
 	 */
 	private function copyStructurallyUnchangedTables(): void
 	{
@@ -1766,57 +1752,6 @@ class RefactorModels extends Migration
 		}
 	}
 
-	/**
-	 * A helper function that allows to drop an index if exists.
-	 *
-	 * @param Blueprint $table
-	 * @param string    $indexName
-	 *
-	 * @throws DBALException
-	 */
-	private function dropIndexIfExists(Blueprint $table, string $indexName)
-	{
-		$doctrineTable = $this->schemaManager->listTableDetails($table->getTable());
-		if ($doctrineTable->hasIndex($indexName)) {
-			$table->dropIndex($indexName);
-		}
-	}
-
-	/**
-	 * A helper function that allows to drop an index if exists.
-	 *
-	 * @param Blueprint $table
-	 * @param string    $indexName
-	 *
-	 * @throws DBALException
-	 */
-	private function dropUniqueIfExists(Blueprint $table, string $indexName)
-	{
-		$doctrineTable = $this->schemaManager->listTableDetails($table->getTable());
-		if ($doctrineTable->hasIndex($indexName)) {
-			$table->dropUnique($indexName);
-		}
-	}
-
-	/**
-	 * A helper function that allows to drop an index if exists.
-	 *
-	 * @param Blueprint $table
-	 * @param string    $indexName
-	 *
-	 * @throws DBALException
-	 */
-	private function dropForeignIfExists(Blueprint $table, string $indexName)
-	{
-		if ($this->driverName === 'sqlite') {
-			return;
-		}
-		$doctrineTable = $this->schemaManager->listTableDetails($table->getTable());
-		if ($doctrineTable->hasForeignKey($indexName)) {
-			$table->dropForeign($indexName);
-		}
-	}
-
 	private function generateKey(): string
 	{
 		// URl-compatible variant of base64 encoding
@@ -1874,7 +1809,7 @@ class RefactorModels extends Migration
 
 		// This is Oct 21st, 1976, so it is also smaller than `self::BIRTH_OF_LYCHEE`
 		if ($id < self::MAX_SIGNED_32BIT_INT / 10 - 1) {
-			$id = $id * 10;
+			$id *= 10;
 		}
 
 		// This will never be true for 32bit platforms, but might be true
@@ -1882,7 +1817,7 @@ class RefactorModels extends Migration
 		if ($id > self::MAX_SIGNED_32BIT_INT) {
 			$id = (float) $id;
 			while ($id >= self::MAX_SIGNED_32BIT_INT) {
-				$id = $id / 10.0;
+				$id /= 10.0;
 			}
 		}
 
@@ -1966,8 +1901,6 @@ class RefactorModels extends Migration
 	 *     problem needs manual attention.
 	 *
 	 * The method either returns or bails out with an exception.
-	 *
-	 * @return void
 	 *
 	 * @throws RuntimeException         thrown, if DB is inconsistent
 	 * @throws InvalidArgumentException
@@ -2061,29 +1994,4 @@ class RefactorModels extends Migration
 			throw new \RuntimeException('Inconsistent DB');
 		}
 	}
-}
-
-/**
- * Model class specific for this migration.
- *
- * Migrations are required to be also runnable in the future after the code
- * base will have evolved.
- * To this end, migrations must not rely on a specific implementation of
- * models, because these models may change in the future, but the migration
- * must conduct its task with respect to a table layout which was valid at
- * the time when the migration was written.
- * In conclusion, this implies that migration should not use models but use
- * low-level DB queries when necessary.
- * Unfortunately, we need the `fixTree()` algorithm and there is no
- * implementation which uses low-level DB queries.
- */
-class RefactorAlbumModel_AlbumModel extends Model implements Node
-{
-	use NodeTrait;
-
-	protected $table = 'albums';
-
-	protected $keyType = 'string';
-
-	public $timestamps = false;
-}
+};

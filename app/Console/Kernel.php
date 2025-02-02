@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Console;
 
 use Illuminate\Console\Scheduling\Schedule;
@@ -35,5 +41,9 @@ class Kernel extends ConsoleKernel
 	protected function commands(): void
 	{
 		$this->load(__DIR__ . '/Commands');
+		$this->load(__DIR__ . '/Commands/Laravel');
+		$this->load(__DIR__ . '/Commands/Legacy');
+		$this->load(__DIR__ . '/Commands/UserManagment');
+		$this->load(__DIR__ . '/Commands/ImageProcessing');
 	}
 }

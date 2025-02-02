@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Actions\Album;
 
 use App\Exceptions\ModelDBException;
@@ -12,8 +18,8 @@ class Move extends Action
 	/**
 	 * Moves the given albums into the target.
 	 *
-	 * @param Album|null        $targetAlbum
-	 * @param Collection<Album> $albums
+	 * @param Album|null            $targetAlbum
+	 * @param Collection<int,Album> $albums
 	 *
 	 * @throws ModelNotFoundException
 	 * @throws ModelDBException

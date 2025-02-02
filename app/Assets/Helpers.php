@@ -1,28 +1,20 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Assets;
 
 use App\Exceptions\Internal\ZeroModuloException;
-use Illuminate\Contracts\Container\BindingResolutionException;
+use Exception;
 use Illuminate\Support\Facades\File;
-use function Safe\getallheaders;
 use function Safe\ini_get;
-use function Safe\parse_url;
-use function Safe\substr;
-use WhichBrowser\Parser as BrowserParser;
 
 class Helpers
 {
-	private int $numTab = 0;
-
-	/**
-	 * Initialize the Facade.
-	 */
-	public function __construct()
-	{
-		$this->numTab = 0;
-	}
-
 	/**
 	 * Add UnixTimeStamp to file path suffix.
 	 *
@@ -44,42 +36,18 @@ class Helpers
 	}
 
 	/**
-	 * Returns the device type as string:
-	 * desktop, mobile, pda, dect, tablet, gaming, ereader,
-	 * media, headset, watch, emulator, television, monitor,
-	 * camera, printer, signage, whiteboard, devboard, inflight,
-	 * appliance, gps, car, pos, bot, projector.
-	 *
-	 * This method is only used to report the type of device back to the
-	 * client.
-	 * This is totally insane, because the client knows its own type anyway.
-	 * This could be completely done in JS code and CSS on the client side.
-	 * See also {@link ConfigFunctions::get_config_device()}.
-	 *
-	 * TODO: Remove this method.
-	 *
-	 * @return string
-	 *
-	 * @throws BindingResolutionException
-	 */
-	public function getDeviceType(): string
-	{
-		$result = new BrowserParser(getallheaders(), ['cache' => app('cache.store')]);
-
-		return $result->getType();
-	}
-
-	/**
 	 * Return the 32bit truncated version of a number seen as string.
 	 *
 	 * @param string $id
 	 * @param int    $prevShortId
+	 * @param int    $phpMax      predefined so set to MAX php during migration
+	 *                            but allow to actually test the code
 	 *
 	 * @return string updated ID
 	 */
-	public function trancateIf32(string $id, int $prevShortId = 0): string
+	public function trancateIf32(string $id, int $prevShortId = 0, int $phpMax = PHP_INT_MAX): string
 	{
-		if (PHP_INT_MAX > 2147483647) {
+		if ($phpMax > 2147483647) {
 			return $id;
 		}
 
@@ -90,34 +58,6 @@ class Helpers
 		}
 
 		return (string) $shortId;
-	}
-
-	/**
-	 * Returns the extension of the filename (path or URI) or an empty string.
-	 *
-	 * @param string $filename
-	 * @param bool   $isURI
-	 *
-	 * @return string extension of the filename starting with a dot
-	 */
-	public function getExtension(string $filename, bool $isURI = false): string
-	{
-		// If $filename is an URI, get only the path component
-		if ($isURI === true) {
-			$filename = parse_url($filename, PHP_URL_PATH);
-		}
-
-		$extension = pathinfo($filename, PATHINFO_EXTENSION);
-
-		// Special cases
-		// https://github.com/electerious/Lychee/issues/482
-		list($extension) = explode(':', $extension, 2);
-
-		if ($extension !== '') {
-			$extension = '.' . $extension;
-		}
-
-		return $extension;
 	}
 
 	/**
@@ -149,9 +89,10 @@ class Helpers
 		// Check if the given path is readable and writable
 		// Both functions are also verifying that the path exists
 		if (
-			file_exists($path) === true && is_readable($path) === true
-			&& is_executable($path) === true
-			&& is_writeable($path) === true
+			file_exists($path) === true &&
+			is_readable($path) === true &&
+			is_executable($path) === true &&
+			is_writeable($path) === true
 		) {
 			return true;
 		}
@@ -180,82 +121,27 @@ class Helpers
 	}
 
 	/**
-	 * Properly convert a boolean to a string
-	 * the default php function returns '' in case of false, this is not the behavior we want.
+	 * From https://www.php.net/manual/en/function.disk-total-space.php.
+	 *
+	 * @param float $bytes
+	 *
+	 * @return string
 	 */
-	public function str_of_bool(bool $b): string
+	public function getSymbolByQuantity(float $bytes): string
 	{
-		return $b ? '1' : '0';
-	}
-
-	/**
-	 * Returns the available licenses.
-	 */
-	public function get_all_licenses(): array
-	{
-		return [
-			'none',
-			'reserved',
-			'CC0',
-			'CC-BY-1.0',
-			'CC-BY-2.0',
-			'CC-BY-2.5',
-			'CC-BY-3.0',
-			'CC-BY-4.0',
-			'CC-BY-NC-1.0',
-			'CC-BY-NC-2.0',
-			'CC-BY-NC-2.5',
-			'CC-BY-NC-3.0',
-			'CC-BY-NC-4.0',
-			'CC-BY-NC-ND-1.0',
-			'CC-BY-NC-ND-2.0',
-			'CC-BY-NC-ND-2.5',
-			'CC-BY-NC-ND-3.0',
-			'CC-BY-NC-ND-4.0',
-			'CC-BY-NC-SA-1.0',
-			'CC-BY-NC-SA-2.0',
-			'CC-BY-NC-SA-2.5',
-			'CC-BY-NC-SA-3.0',
-			'CC-BY-NC-SA-4.0',
-			'CC-BY-ND-1.0',
-			'CC-BY-ND-2.0',
-			'CC-BY-ND-2.5',
-			'CC-BY-ND-3.0',
-			'CC-BY-ND-4.0',
-			'CC-BY-SA-1.0',
-			'CC-BY-SA-2.0',
-			'CC-BY-SA-2.5',
-			'CC-BY-SA-3.0',
-			'CC-BY-SA-4.0',
+		$symbols = [
+			'B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB',
 		];
-	}
+		$exp = intval(floor(log($bytes) / log(1024.0)));
 
-	/**
-	 * Return incrementing numbers.
-	 */
-	public function data_index(): int
-	{
-		$this->numTab++;
+		if ($exp >= sizeof($symbols)) {
+			// @codeCoverageIgnoreStart
+			// if the number is too large, we fall back to the largest available symbol
+			$exp = sizeof($symbols) - 1;
+			// @codeCoverageIgnoreEnd
+		}
 
-		return $this->numTab;
-	}
-
-	/**
-	 * Reset and return incrementing numbers.
-	 */
-	public function data_index_r(): int
-	{
-		$this->numTab = 1;
-
-		return $this->numTab;
-	}
-
-	/**
-	 * Reset the incrementing number.
-	 */
-	public function data_index_set(int $idx = 0): void
-	{
-		$this->numTab = $idx;
+		return sprintf('%.2f %s', ($bytes / pow(1024, $exp)), $symbols[$exp]);
 	}
 
 	/**
@@ -268,5 +154,139 @@ class Helpers
 		$disabledFunctions = explode(',', ini_get('disable_functions'));
 
 		return function_exists('exec') && !in_array('exec', $disabledFunctions, true);
+	}
+
+	/**
+	 * Given a duration convert it into hms.
+	 *
+	 * @param int|float $d length in seconds
+	 *
+	 * @return string equivalent time string formatted
+	 */
+	public function secondsToHMS(int|float $d): string
+	{
+		$h = (int) floor($d / 3600);
+		$m = (int) floor(($d % 3600) / 60);
+		$s = (int) floor($d % 60);
+
+		return ($h > 0 ? $h . 'h' : '')
+			. ($m > 0 ? $m . 'm' : '')
+			. ($s > 0 || ($h === 0 && $m === 0) ? $s . 's' : '');
+	}
+
+	/**
+	 * Return true if the upload_max_filesize is bellow what we want.
+	 */
+	public function convertSize(string $size): int
+	{
+		$size = trim($size);
+		$last = strtolower($size[strlen($size) - 1]);
+		$size = intval($size);
+
+		switch ($last) {
+			case 'g':
+				$size *= 1024;
+				// no break
+			case 'm':
+				$size *= 1024;
+				// no break
+			case 'k':
+				$size *= 1024;
+		}
+
+		return $size;
+	}
+
+	/**
+	 * Converts a decimal degree into integer degree, minutes and seconds.
+	 *
+	 * @param float|null $decimal
+	 * @param bool       $type    - indicates if the passed decimal indicates a
+	 *                            latitude (`true`) or a longitude (`false`)
+	 *
+	 * @returns string
+	 */
+	public function decimalToDegreeMinutesSeconds(float|null $decimal, bool $type): string|null
+	{
+		if ($decimal === null) {
+			return null;
+		}
+
+		$d = abs($decimal);
+
+		// absolute value of decimal must be smaller than 180;
+		if ($d > 180) {
+			return '';
+		}
+
+		// set direction; north assumed
+		if ($type && $decimal < 0) {
+			$direction = 'S';
+		} elseif (!$type && $decimal < 0) {
+			$direction = 'W';
+		} elseif (!$type) {
+			$direction = 'E';
+		} else {
+			$direction = 'N';
+		}
+
+		// get degrees
+		$degrees = floor($d);
+
+		// get seconds
+		$seconds = ($d - $degrees) * 3600;
+
+		// get minutes
+		$minutes = floor($seconds / 60);
+
+		// reset seconds
+		$seconds = floor($seconds - $minutes * 60);
+
+		return $degrees . '° ' . $minutes . "' " . $seconds . '" ' . $direction;
+	}
+
+	/**
+	 * Censor a word by replacing half of its character by stars.
+	 *
+	 * @param string $string         to censor
+	 * @param float  $percentOfClear the amount of the original string that remains untouched. The lower the value, the higher the censoring.
+	 *
+	 * @return string
+	 */
+	public function censor(string $string, float $percentOfClear = 0.5): string
+	{
+		$strLength = strlen($string);
+		if ($strLength === 0) {
+			return '';
+		}
+
+		// Length of replacement
+		$censored_length = $strLength - (int) floor($strLength * $percentOfClear);
+
+		// we leave half the space in front and behind.
+		$start = (int) floor(($strLength - $censored_length) / 2);
+
+		$replacement = str_repeat('*', $censored_length);
+
+		return substr_replace($string, $replacement, $start, $censored_length);
+	}
+
+	/**
+	 * Format exception trace as text.
+	 *
+	 * @param \Exception $e
+	 *
+	 * @return string
+	 *
+	 * @codeCoverageIgnore
+	 */
+	public function exceptionTraceToText(\Exception $e): string
+	{
+		$renderer = new ArrayToTextTable();
+
+		return $renderer->getTable(collect($e->getTrace())->map(fn (array $err) => [
+			'class' => $err['class'] ?? $err['file'] ?? '?',
+			'line' => $err['line'] ?? '?',
+			'function' => $err['function']])->all());
 	}
 }

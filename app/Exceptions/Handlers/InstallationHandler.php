@@ -1,11 +1,17 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Exceptions\Handlers;
 
-use App\Contracts\HttpExceptionHandler;
+use App\Contracts\Exceptions\Handlers\HttpExceptionHandler;
 use App\Exceptions\InstallationAlreadyCompletedException;
 use App\Exceptions\InstallationRequiredException;
-use App\Redirections\ToInstall;
+use App\Http\Redirections\ToInstall;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface as HttpException;
 

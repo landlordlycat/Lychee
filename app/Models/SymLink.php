@@ -1,15 +1,20 @@
 <?php
 
+/**
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2017-2018 Tobias Reich
+ * Copyright (c) 2018-2025 LycheeOrg.
+ */
+
 namespace App\Models;
 
 use App\Casts\MustNotSetCast;
 use App\Exceptions\Internal\FrameworkException;
 use App\Exceptions\MediaFileOperationException;
 use App\Exceptions\ModelDBException;
-use App\Image\FlysystemFile;
-use App\Models\Extensions\HasAttributesPatch;
+use App\Image\Files\FlysystemFile;
+use App\Models\Builders\SymLinkBuilder;
 use App\Models\Extensions\ThrowsConsistentExceptions;
-use App\Models\Extensions\UseFixedQueryBuilder;
 use App\Models\Extensions\UTCBasedTimes;
 use Carbon\Exceptions\InvalidTimeZoneException;
 use Illuminate\Database\Eloquent\Builder;
@@ -32,17 +37,32 @@ use function Safe\unlink;
  * @property Carbon      $created_at
  * @property Carbon      $updated_at
  *
- * @method static Builder expired()
+ * @method static Builder                expired()
+ * @method static SymLinkBuilder|SymLink addSelect($column)
+ * @method static SymLinkBuilder|SymLink join(string $table, string $first, string $operator = null, string $second = null, string $type = 'inner', string $where = false)
+ * @method static SymLinkBuilder|SymLink joinSub($query, $as, $first, $operator = null, $second = null, $type = 'inner', $where = false)
+ * @method static SymLinkBuilder|SymLink leftJoin(string $table, string $first, string $operator = null, string $second = null)
+ * @method static SymLinkBuilder|SymLink newModelQuery()
+ * @method static SymLinkBuilder|SymLink newQuery()
+ * @method static SymLinkBuilder|SymLink orderBy($column, $direction = 'asc')
+ * @method static SymLinkBuilder|SymLink query()
+ * @method static SymLinkBuilder|SymLink select($columns = [])
+ * @method static SymLinkBuilder|SymLink whereCreatedAt($value)
+ * @method static SymLinkBuilder|SymLink whereId($value)
+ * @method static SymLinkBuilder|SymLink whereIn(string $column, string $values, string $boolean = 'and', string $not = false)
+ * @method static SymLinkBuilder|SymLink whereNotIn(string $column, string $values, string $boolean = 'and')
+ * @method static SymLinkBuilder|SymLink whereShortPath($value)
+ * @method static SymLinkBuilder|SymLink whereSizeVariantId($value)
+ * @method static SymLinkBuilder|SymLink whereUpdatedAt($value)
+ *
+ * @mixin \Eloquent
  */
 class SymLink extends Model
 {
 	use UTCBasedTimes;
-	use HasAttributesPatch;
 	use ThrowsConsistentExceptions {
 		ThrowsConsistentExceptions::delete as private internalDelete;
 	}
-	/** @phpstan-use UseFixedQueryBuilder<SymLink> */
-	use UseFixedQueryBuilder;
 
 	public const DISK_NAME = 'symbolic';
 
@@ -55,14 +75,27 @@ class SymLink extends Model
 	];
 
 	/**
-	 * @var string[] The list of attributes which exist as columns of the DB
-	 *               relation but shall not be serialized to JSON
+	 * @var array<int,string> The list of attributes which exist as columns of the DB
+	 *                        relation but shall not be serialized to JSON
 	 */
 	protected $hidden = [
 		'size_variant', // see above and otherwise infinite loops will occur
 		'size_variant_id', // see above
 	];
 
+	/**
+	 * @param $query
+	 *
+	 * @return SymLinkBuilder
+	 */
+	public function newEloquentBuilder($query): SymLinkBuilder
+	{
+		return new SymLinkBuilder($query);
+	}
+
+	/**
+	 * @return BelongsTo<SizeVariant,$this>
+	 */
 	public function size_variant(): BelongsTo
 	{
 		return $this->belongsTo(SizeVariant::class);
@@ -71,9 +104,9 @@ class SymLink extends Model
 	/**
 	 * Scopes the passed query to all outdated symlinks.
 	 *
-	 * @param Builder $query the unscoped query
+	 * @param Builder<SizeVariant> $query the unscoped query
 	 *
-	 * @return Builder the scoped query
+	 * @return Builder<SizeVariant> the scoped query
 	 *
 	 * @throws InvalidTimeZoneException
 	 */
@@ -99,10 +132,13 @@ class SymLink extends Model
 	protected function getUrlAttribute(): string
 	{
 		try {
+			/** @disregard P1013 */
 			return Storage::disk(self::DISK_NAME)->url($this->short_path);
+			// @codeCoverageIgnoreStart
 		} catch (\RuntimeException $e) {
 			throw new FrameworkException('Laravel\'s storage component', $e);
 		}
+		// @codeCoverageIgnoreEnd
 	}
 
 	/**
@@ -112,7 +148,7 @@ class SymLink extends Model
 	 * If this method cannot create the symbolic link, then this method
 	 * cancels the insert operation.
 	 *
-	 * @param Builder $query
+	 * @param Builder<static> $query
 	 *
 	 * @return bool
 	 *
@@ -121,18 +157,21 @@ class SymLink extends Model
 	protected function performInsert(Builder $query): bool
 	{
 		$file = $this->size_variant->getFile()->toLocalFile();
-		$origFullPath = $file->getAbsolutePath();
+		$origRealPath = $file->getRealPath();
 		$extension = $file->getExtension();
-		$symShortPath = hash('sha256', random_bytes(32) . '|' . $origFullPath) . $extension;
-		$symFullPath = Storage::disk(SymLink::DISK_NAME)->path($symShortPath);
+		$symShortPath = hash('sha256', random_bytes(32) . '|' . $origRealPath) . $extension;
+		/** @disregard P1013 */
+		$symAbsolutePath = Storage::disk(SymLink::DISK_NAME)->path($symShortPath);
 		try {
-			if (is_link($symFullPath)) {
-				unlink($symFullPath);
+			if (is_link($symAbsolutePath)) {
+				unlink($symAbsolutePath);
 			}
-			symlink($origFullPath, $symFullPath);
+			symlink($origRealPath, $symAbsolutePath);
+			// @codeCoverageIgnoreStart
 		} catch (FilesystemException $e) {
 			throw new MediaFileOperationException($e->getMessage(), $e);
 		}
+		// @codeCoverageIgnoreEnd
 		$this->short_path = $symShortPath;
 
 		return parent::performInsert($query);
